@@ -1,0 +1,22 @@
+
+> rest-express@1.0.0 dev
+> cross-env NODE_ENV=development tsx watch server/index.ts
+
+Uncaught exception: Error: listen EADDRINUSE: address already in use :::5000
+    at __node_internal_captureLargerStackTrace (node:internal/errors:563:5)
+    at __node_internal_uvExceptionWithHostPort (node:internal/errors:660:12)
+    at Server.setupListenHandle [as _listen2] (node:net:1872:16)
+    at listenInCluster (node:net:1920:12)
+    at Server.listen (node:net:2008:7)
+    at <anonymous> (d:\CarpoolRewards\server\index.ts:116:10) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 5000
+}
+Database connection established successfully
+Database pool initialized with retry configuration
+SIGINT received, shutting down database connections
+8:40:16 AM [tsx] Previous process hasn't exited yet. Force killing...
+Terminate batch job (Y/N)? 
