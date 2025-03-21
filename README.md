@@ -2,7 +2,7 @@
 
 <!-- Animated Header -->
 <div align="center">
-  <img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:3d85c6,100:00ffff&height=200&section=header&text=CarpoolRewards&fontSize=70&fontColor=fff&animation=fadeIn&fontAlignY=38&desc=AI-Powered%20Carpooling%20with%20Rewards&descAlignY=60&descAlign=50" />
+  <img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:3d85c6,100:00ffff&height=200&section=header&text=RideShare&fontSize=70&fontColor=fff&animation=fadeIn&fontAlignY=38&desc=AI-Powered%20Carpooling%20with%20Rewards&descAlignY=60&descAlign=50" />
 </div>
 
 <img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br>
@@ -95,19 +95,16 @@ Our mission is to create a sustainable transportation solution while rewarding u
       <br>WebSockets
     </td>
     <td align="center" width="96">
-      <img src="https://www.vectorlogo.zone/logos/tailwindcss/tailwindcss-icon.svg" alt="Tailwind" width="48" height="48"/>
+      <img src="https://w7.pngwing.com/pngs/771/978/png-transparent-tailwind-css-css-framework-customizable-low-level-tailwind-logo-3d-icon-thumbnail.png" alt="Tailwind" width="48" height="48"/>
       <br>Tailwind
     </td>
     <td align="center" width="96">
-      <img src="https://www.vectorlogo.zone/logos/tanstack/tanstack-icon.svg" alt="React Query" width="48" height="48"/>
       <br>React Query
     </td>
     <td align="center" width="96">
-      <img src="https://www.vectorlogo.zone/logos/openai/openai-icon.svg" alt="AI" width="48" height="48"/>
       <br>AI Integration
     </td>
     <td align="center" width="96">
-      <img src="https://www.vectorlogo.zone/logos/blockchain/blockchain-icon.svg" alt="Blockchain" width="48" height="48"/>
       <br>Blockchain
     </td>
   </tr>
