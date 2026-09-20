@@ -1,0 +1,40 @@
+# gitleaks configuration.
+#
+# Extends the upstream default ruleset and adds database connection-string rules.
+# Upstream gitleaks ships no MongoDB rule, so the MongoDB Atlas URI that was
+# committed to this repository in b9f390f was NOT detected by a default scan.
+# Without these rules a clean gitleaks run is not evidence that the tree is clean.
+#
+# Scan history with:
+#   gitleaks detect --source . --log-opts="--all" --redact -v
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "mongodb-connection-uri"
+description = "MongoDB connection URI with embedded credentials"
+regex = '''mongodb(\+srv)?:\/\/[^\s:@\/]+:[^\s@\/]+@[^\s\/]+'''
+tags = ["database", "credentials", "mongodb"]
+
+[[rules]]
+id = "postgres-connection-uri"
+description = "PostgreSQL connection URI with embedded credentials"
+regex = '''postgres(ql)?:\/\/[^\s:@\/]+:[^\s@\/]+@[^\s\/]+'''
+tags = ["database", "credentials", "postgres"]
+
+[[rules]]
+id = "mysql-connection-uri"
+description = "MySQL connection URI with embedded credentials"
+regex = '''mysql:\/\/[^\s:@\/]+:[^\s@\/]+@[^\s\/]+'''
+tags = ["database", "credentials", "mysql"]
+
+[[rules]]
+id = "redis-connection-uri"
+description = "Redis connection URI with embedded credentials"
+regex = '''redis(s)?:\/\/[^\s:@\/]*:[^\s@\/]+@[^\s\/]+'''
+tags = ["database", "credentials", "redis"]
+
+[allowlist]
+description = "Placeholders in documentation and examples"
+paths = ['''\.env\.example$''', '''(^|\/)README\.md$''', '''(^|\/)docs\/''']

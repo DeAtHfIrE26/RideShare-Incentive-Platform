@@ -1,210 +1,174 @@
-<img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br>
+# RideShare Incentive Platform
 
-<!-- Animated Header -->
-<div align="center">
-  <img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:3d85c6,100:00ffff&height=200&section=header&text=RideShare&fontSize=70&fontColor=fff&animation=fadeIn&fontAlignY=38&desc=AI-Powered%20Carpooling%20with%20Rewards&descAlignY=60&descAlign=50" />
-</div>
+A carpooling application with a rewards system: users offer and book rides,
+earn reward points, exchange messages, and use a set of safety features
+(trusted contacts, ride verification codes, location sharing, safety zones).
 
-<img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br>
+> **Status: this repository does not currently build.** Part of the client
+> source tree is missing from version control — see
+> [Known limitations](#known-limitations) before attempting setup. The
+> instructions below are accurate for the code that is present, but
+> `npm run build` and `npm run dev` will fail until the missing files are
+> restored.
 
-<!-- Animated Introduction -->
-<div align="center">
-  <a href="https://git.io/typing-svg">
-    <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&duration=3000&pause=1000&color=00FFFF&center=true&vCenter=true&width=650&lines=Redefining+Carpooling+with+Smart+Rewards;Advanced+Safety+Features+for+Peace+of+Mind;Blockchain-Verified+Reward+System;Real-Time+Tracking+and+Messaging" alt="Typing SVG" />
-  </a>
-</div>
+## Architecture
 
-<img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br>
+Single Node process serving both the API and the client.
 
-# 🚀 About CarpoolRewards
+- **Server** — Express 4 (`server/index.ts`). Registers ~29 REST endpoints
+  under `/api` (`server/routes.ts`) and a WebSocket server on `/ws` used for
+  chat and live ride tracking. In development it mounts Vite as middleware; in
+  production it serves the prebuilt client from `dist/public`.
+- **Database** — PostgreSQL accessed through Drizzle ORM using the
+  `@neondatabase/serverless` driver over WebSockets. Schema and Zod validators
+  live in `shared/schema.ts` and are shared by client and server. Ten tables:
+  `users`, `rides`, `bookings`, `rewards`, `messages`, `reviews`,
+  `safety_alerts`, `trusted_contacts`, `safety_zones`, `ride_verifications`.
+- **Auth** — Passport local strategy with bcrypt password hashing
+  (`server/auth.ts`). Sessions are stored in Postgres via `connect-pg-simple`.
+- **Client** — React 18 + TypeScript, built by Vite from `client/`. Routing
+  with `wouter`, server state with TanStack Query, UI from shadcn components
+  on Radix primitives, styled with Tailwind. Theme variables are generated
+  from `theme.json` at build time.
 
-CarpoolRewards is a next-generation carpooling platform that combines ride-sharing with an innovative reward system. Our application revolutionizes the traditional carpooling experience by offering:
+Path aliases: `@/*` → `client/src/*`, `@shared/*` → `shared/*`.
 
-- **Blockchain-Verified Rewards** for every ride taken or offered
-- **AI-Powered Ride Matching** to optimize carpooling experiences
-- **Advanced Safety Features** including real-time tracking and alerts
-- **Seamless Communication** through an integrated messaging system
-- **Personalized Reward Recommendations** based on user preferences and behavior
+## Prerequisites
 
-Our mission is to create a sustainable transportation solution while rewarding users for making environmentally friendly choices.
+- Node.js 20 or later. Development and verification of this document were done
+  on Node 22.22.2 / npm 10.9.7. There is no `engines` field in `package.json`,
+  so this is a recommendation rather than an enforced constraint.
+- A PostgreSQL database. The code paths assume a Neon-compatible endpoint
+  because the driver connects over WebSockets; a plain Postgres server may
+  require swapping the driver.
 
-<img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br>
+## Setup
 
-# 🛠️ Core Features
-
-## 🚗 Ride Management
-
-- **Create and Book Rides**: Easily offer or find rides with intuitive UI
-- **Smart Matching Algorithm**: AI-based system connects the most compatible riders and drivers
-- **Flexible Scheduling**: Book rides for now or schedule them for later
-- **Ride Details**: View comprehensive information including price, available seats, and vehicle details
-
-## 🔐 Advanced Safety System
-
-- **Real-Time Tracking**: Monitor ride progress with live location updates
-- **Safety Verification Codes**: Confirm rider/driver identity with secure codes
-- **Emergency Alerts**: Quick access to emergency assistance and trusted contacts
-- **Safety Score**: Build trust with a transparent safety rating system
-- **Behavior Reporting**: Flag and report any concerns during rides
-
-## 💬 Integrated Messaging
-
-- **Real-Time Chat**: Communicate directly with drivers or passengers
-- **Ride-Specific Conversations**: Organized chats based on specific bookings
-- **Notification System**: Receive alerts for new messages and important updates
-- **Booking Coordination**: Easily discuss pickup details and special requirements
-
-## 🏆 AI-Powered Rewards
-
-- **Point System**: Earn points for every ride taken or offered
-- **Achievement System**: Complete challenges to earn bonus rewards
-- **Personalized Rewards**: AI recommends rewards based on your preferences
-- **Tier Progression**: Advance through user tiers for enhanced benefits
-- **Reward Marketplace**: Redeem points for discounts, free rides, and other perks
-
-<img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br>
-
-# 💻 Technology Stack
-
-<table align="center">
-  <tr>
-    <td align="center" width="96">
-      <img src="https://www.vectorlogo.zone/logos/reactjs/reactjs-icon.svg" alt="React" width="48" height="48"/>
-      <br>React
-    </td>
-    <td align="center" width="96">
-      <img src="https://www.vectorlogo.zone/logos/nodejs/nodejs-icon.svg" alt="Node.js" width="48" height="48"/>
-      <br>Node.js
-    </td>
-    <td align="center" width="96">
-      <img src="https://www.vectorlogo.zone/logos/expressjs/expressjs-icon.svg" alt="Express" width="48" height="48"/>
-      <br>Express
-    </td>
-    <td align="center" width="96">
-      <img src="https://www.vectorlogo.zone/logos/mongodb/mongodb-icon.svg" alt="MongoDB" width="48" height="48"/>
-      <br>MongoDB
-    </td>
-    <td align="center" width="96">
-      <img src="https://www.vectorlogo.zone/logos/typescriptlang/typescriptlang-icon.svg" alt="TypeScript" width="48" height="48"/>
-      <br>TypeScript
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="96">
-      <img src="https://www.vectorlogo.zone/logos/socketio/socketio-icon.svg" alt="Socket.IO" width="48" height="48"/>
-      <br>WebSockets
-    </td>
-    <td align="center" width="96">
-      <img src="https://w7.pngwing.com/pngs/771/978/png-transparent-tailwind-css-css-framework-customizable-low-level-tailwind-logo-3d-icon-thumbnail.png" alt="Tailwind" width="48" height="48"/>
-      <br>Tailwind
-    </td>
-    <td align="center" width="96">
-      <br>React Query
-    </td>
-    <td align="center" width="96">
-      <br>AI Integration
-    </td>
-    <td align="center" width="96">
-      <br>Blockchain
-    </td>
-  </tr>
-</table>
-
-<img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br>
-
-# 📱 Application Structure
-
-```
-client/                    # Frontend application
-├── src/
-│   ├── components/        # Reusable UI components
-│   │   ├── chat/          # Chat-related components
-│   │   ├── safety/        # Safety feature components
-│   │   └── ui/            # UI components library
-│   ├── hooks/             # Custom React hooks
-│   ├── lib/               # Utility functions and services
-│   └── pages/             # Application pages
-│       ├── home-page.tsx
-│       ├── rides-page.tsx
-│       ├── rewards-page.tsx
-│       ├── safety-page.tsx
-│       ├── chat-page.tsx
-│       └── profile-page.tsx
-│
-server/                    # Backend application
-├── auth.ts                # Authentication system
-├── routes.ts              # API endpoints
-├── safetyServices.ts      # Safety-related functionality
-├── storage.ts             # Database operations
-└── index.ts               # Server entry point
-
-shared/                    # Shared code between client and server
-└── schema.ts              # Database schema definitions
+```bash
+git clone https://github.com/DeAtHfIrE26/RideShare-Incentive-Platform
+cd RideShare-Incentive-Platform
+npm install
+cp .env.example .env    # then fill in real values
 ```
 
-<img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br>
+Apply the schema:
 
-# 🌟 Key Features Showcase
+```bash
+npm run db:push         # drizzle-kit push, uses drizzle.config.ts
+```
 
-## AI-Powered Rewards System
+Run the SQL migration that `server/migrate.ts` applies:
 
-Our rewards system uses advanced AI to personalize recommendations based on user behavior:
+```bash
+npm run migrate
+```
 
-- **Dynamic Point Allocation**: Earn points for every ride, with bonus points for eco-friendly choices
-- **Achievement System**: Complete challenges like "First Step," "Regular Carpooler," and "Carbon Saver"
-- **Tier Progression**: Advance through tiers with increased benefits at each level
-- **Personalized Rewards**: Receive recommendations like discounts, free rides, and carbon credit donations
+Verify database connectivity:
 
-## Advanced Safety Features
+```bash
+node test-db.mjs
+npm run healthcheck     # also asserts DATABASE_URL and SESSION_SECRET are set
+```
 
-Safety is our top priority, with features including:
+Both attempt a live connection. With placeholder values from `.env.example`
+they emit a large WebSocket `ErrorEvent` dump before reporting unhealthy;
+that is the driver failing to reach the host, not a configuration error in
+the scripts themselves.
 
-- **Identity Verification**: Secure code verification between riders and drivers
-- **Emergency Response System**: One-tap access to emergency services
-- **Real-Time Location Sharing**: Know exactly where your ride is at all times
-- **Safety Alerts**: Multiple alert types for different safety concerns
-- **Trusted Contacts**: Automatically notify contacts in emergency situations
+Start the dev server:
 
-## Real-Time Chat System
+```bash
+npm run dev             # tsx watch on server/index.ts, Vite middleware, port 5000
+```
 
-Stay connected with an integrated messaging platform:
+The port is hardcoded to `5000` in `server/index.ts` and is not configurable
+via environment variable.
 
-- **Direct Messaging**: Chat directly with drivers or passengers
-- **Ride-Specific Communication**: Dedicated chat channels for each booking
-- **Notification System**: Receive alerts for new messages
-- **Typing Indicators**: See when someone is responding to your message
-- **Message History**: Access previous conversations for reference
+## Environment variables
 
-<img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br>
+See `.env.example`. Three variables are read anywhere in the codebase:
 
-# 🚀 Future Development
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | `server/db.ts`, `server/migrate.ts`, `drizzle.config.ts` | Postgres connection string |
+| `SESSION_SECRET` | `server/auth.ts` | Signs express-session cookies |
+| `NODE_ENV` | `server/index.ts`, `server/db.ts` | Selects dev middleware and DB error behaviour |
 
-As we continue to enhance CarpoolRewards, we're excited about upcoming features:
+## Tests
 
-- **Mobile Application**: Native apps for iOS and Android
-- **Enhanced AI Predictions**: More accurate ride matching and route optimization
-- **Expanded Rewards Marketplace**: More redemption options with partner businesses
-- **Advanced Analytics Dashboard**: Detailed insights into your carpooling habits
-- **Community Features**: Connect with regular carpoolers and build trusted networks
-- **Carbon Impact Tracking**: Visualize your positive environmental impact
+There are none. The repository contains no test files, no test runner
+dependency, and no `test` script. `tsconfig.json` excludes `**/*.test.ts`,
+which suggests tests were intended but never committed.
 
-<img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br>
+The only available static check is:
 
-# 🔗 Connect With Us
+```bash
+npm run check           # tsc, no emit
+```
 
-<p align="center">
-  <a href="https://github.com/CarpoolRewards" target="_blank"><img align="center" src="https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white" /></a>
-  <a href="https://twitter.com/CarpoolRewards" target="_blank"><img align="center" src="https://img.shields.io/badge/Twitter-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white" /></a>
-  <a href="mailto:contact@carpoolrewards.com"><img align="center" src="https://img.shields.io/badge/Email-D14836?style=for-the-badge&logo=gmail&logoColor=white" /></a>
-</p>
+This currently reports 63 errors — see below.
 
-<img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br>
+## Known limitations
 
-<h2 align="center">🌟 Thank you for your interest in CarpoolRewards! 🌟</h2>
-<p align="center">Together, we're creating a more sustainable future while rewarding responsible transportation choices.</p>
+These are pre-existing defects, not consequences of repository cleanup. They
+were verified by running the commands above against a clean clone.
 
-<div align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:00ffff,100:3d85c6&height=150&section=footer&text=Drive%20Together,%20Earn%20Together&fontSize=30&fontColor=fff&animation=fadeIn&fontAlignY=70" />
-</div>
+1. **The client entrypoint and roughly a third of the client source are absent
+   from git.** `client/index.html` loads `/src/main.tsx`, which has never been
+   committed in any commit. Also missing: the entire `client/src/lib/`
+   directory (`utils`, `queryClient`, `protected-route`, `auth-fetch`, `ws`)
+   and the entire `client/src/pages/` directory (all nine page components
+   imported by `client/src/App.tsx`). 44 of the 64 committed client files
+   import `@/lib/utils`, so very little compiles.
 
-<img width="2000rem" src="https://raw.githubusercontent.com/SamirPaulb/SamirPaulb/main/assets/rainbow-superthin.webp"><br> 
+   Consequence: `npm run build` fails with
+   `Rollup failed to resolve import "/src/main.tsx"`, and `npm run check`
+   reports 63 errors, most of them `TS2307 Cannot find module`. Only the
+   owner's local working copy has these files; they must be committed before
+   the project can build.
+
+2. **`npm start` cannot work even once the build is fixed.** `build` runs only
+   `vite build`, which emits the client to `dist/public`. `start` runs
+   `node dist/index.js`, which nothing produces — the server-bundling step is
+   missing from the build script. `esbuild` is present as an unused
+   devDependency, suggesting such a step was removed.
+
+3. **The migration chain is incomplete.** `migrations/` contains `0001`, `0005`
+   and `0006`; `0002` through `0004` are absent. `server/migrate.ts` hardcodes
+   only `0001`. The schema cannot be reproduced from this repository alone;
+   `npm run db:push` derives it from `shared/schema.ts` instead.
+
+4. **Two of the 63 type errors are not missing-module errors.**
+   `client/src/components/safety/RealTimeTracking.tsx:229` passes a
+   `"success"` variant to `Badge`, which only accepts `default`,
+   `destructive`, `outline` and `secondary` — a real mismatch that will
+   survive restoring the missing files.
+   `client/src/components/notifications/notification-list.tsx:54` has an
+   implicit-`any` parameter that is most likely downstream of the missing
+   `@/lib/ws` module and may resolve on its own once that file is restored.
+
+5. **Deployment target.** The WebSocket server rules out a standard Vercel
+   serverless deployment for the backend. See `docs/DEPLOYMENT.md`.
+
+## Security note
+
+A MongoDB Atlas connection URI containing a username and password was
+committed to this repository in `b9f390f` (2025-03-21) inside
+`attached_assets/`, and the repository has been public since that date. The
+file has been removed from the working tree, but the credential remains in git
+history until history is rewritten. See `docs/DEPLOYMENT.md` for the rewrite
+procedure and the rotation requirement.
+
+Scan the repository with:
+
+```bash
+gitleaks detect --source . --config .gitleaks.toml --log-opts="--all" --redact -v
+```
+
+The bundled `.gitleaks.toml` adds database connection-URI rules. Upstream
+gitleaks has no MongoDB rule and does not detect the URI above with its
+default configuration.
+
+## License
+
+MIT (per `package.json`). No LICENSE file is committed.
