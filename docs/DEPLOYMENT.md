@@ -93,38 +93,38 @@ cleanup.
 
 ## 2. Vercel readiness
 
-### Blocking issue: the project does not build
+### Current state
 
-`npm run build` fails at HEAD:
+The build now succeeds and the server bundles. The remaining blocker to a
+working deployment is a PostgreSQL database: `server/db.ts` raises at startup
+without `DATABASE_URL`, and every authenticated route depends on it. Nothing in
+this repository provisions one.
 
-```
-[vite]: Rollup failed to resolve import "/src/main.tsx" from "client/index.html"
-```
+Verified locally from a clean build:
 
-`client/src/main.tsx`, `client/src/lib/` and `client/src/pages/` have never
-been committed. Until those files are in the repository, **no deployment to
-any host is possible.** Everything below is contingent on fixing that first.
+- `npm run build` emits `dist/public` (client) and `dist/index.js` (server)
+- `npm start` boots and logs `serving on port 5000`
+- `GET /` returns the built client with theme variables injected
+- `GET /api/user` returns 401 unauthenticated
+- `GET /health` reports `unhealthy` / `database: disconnected` against an
+  unreachable database, which is the correct response
 
 ### Build settings
 
 | Setting | Value | Confidence |
 | --- | --- | --- |
 | Install command | `npm install` | verified |
-| Build command | `npm run build` (`vite build`) | verified to be the configured command; the build itself fails |
+| Build command | `vite build`, pinned in `vercel.json` | verified |
 | Output directory | `dist/public` | verified from `vite.config.ts` `build.outDir` |
-| Node version | not pinned — no `engines` field in `package.json` | Vercel will use its default; **pin this explicitly** |
+| Node version | `engines.node >= 20`; the Vercel project is set to 22.x | verified |
 
-Add an `engines` field so local and deployed runtimes agree, for example
-`"engines": { "node": ">=20" }`. This was not added as part of the cleanup
-because it is a behavioural change to the build contract.
+`engines.node` is now set to `>=20`.
 
-### The `start` script is broken independently of Vercel
+### The `start` script
 
-`build` runs only `vite build`, emitting the client to `dist/public`. `start`
-runs `node dist/index.js`, which nothing produces — the server bundling step
-is absent. `esbuild` sits unused in devDependencies. Any host that runs
-`npm start` will fail. Fixing this requires adding a server build step, which
-is a change to the build contract and is out of scope for hygiene.
+Previously broken: `build` emitted only the client while `start` ran
+`dist/index.js`, which nothing produced. `build` now runs the esbuild server
+bundle as well, and `npm start` boots correctly on any Node host.
 
 ### Serverless compatibility
 

@@ -4,12 +4,11 @@ A carpooling application with a rewards system: users offer and book rides,
 earn reward points, exchange messages, and use a set of safety features
 (trusted contacts, ride verification codes, location sharing, safety zones).
 
-> **Status: this repository does not currently build.** Part of the client
-> source tree is missing from version control — see
-> [Known limitations](#known-limitations) before attempting setup. The
-> instructions below are accurate for the code that is present, but
-> `npm run build` and `npm run dev` will fail until the missing files are
-> restored.
+> **Note on provenance.** The client entrypoint, `client/src/lib/` and
+> `client/src/pages/` were missing from every commit in this repository's
+> history and were not recoverable from git. They have been reimplemented
+> against the surviving contracts (the components, hooks and API that were
+> committed). They are not the original author's UI code.
 
 ## Architecture
 
@@ -75,6 +74,13 @@ they emit a large WebSocket `ErrorEvent` dump before reporting unhealthy;
 that is the driver failing to reach the host, not a configuration error in
 the scripts themselves.
 
+Build and run in production mode:
+
+```bash
+npm run build             # vite build + esbuild server bundle -> dist/
+npm start                 # node dist/index.js, serves API and client on :5000
+```
+
 Start the dev server:
 
 ```bash
@@ -106,46 +112,37 @@ The only available static check is:
 npm run check           # tsc, no emit
 ```
 
-This currently reports 63 errors — see below.
+This currently reports 0 errors.
 
 ## Known limitations
 
 These are pre-existing defects, not consequences of repository cleanup. They
 were verified by running the commands above against a clean clone.
 
-1. **The client entrypoint and roughly a third of the client source are absent
-   from git.** `client/index.html` loads `/src/main.tsx`, which has never been
-   committed in any commit. Also missing: the entire `client/src/lib/`
-   directory (`utils`, `queryClient`, `protected-route`, `auth-fetch`, `ws`)
-   and the entire `client/src/pages/` directory (all nine page components
-   imported by `client/src/App.tsx`). 44 of the 64 committed client files
-   import `@/lib/utils`, so very little compiles.
+1. **Part of the client was reconstructed, not recovered.** `main.tsx`, all of
+   `client/src/lib/` (`utils`, `queryClient`, `protected-route`, `auth-fetch`,
+   `ws`) and all nine page components in `client/src/pages/` never existed in
+   any commit. They are new implementations matching how the surviving code
+   calls them, not the original UI. If the original files resurface they should
+   be preferred.
 
-   Consequence: `npm run build` fails with
-   `Rollup failed to resolve import "/src/main.tsx"`, and `npm run check`
-   reports 63 errors, most of them `TS2307 Cannot find module`. Only the
-   owner's local working copy has these files; they must be committed before
-   the project can build.
-
-2. **`npm start` cannot work even once the build is fixed.** `build` runs only
-   `vite build`, which emits the client to `dist/public`. `start` runs
-   `node dist/index.js`, which nothing produces — the server-bundling step is
-   missing from the build script. `esbuild` is present as an unused
-   devDependency, suggesting such a step was removed.
+2. **The `/ws` realtime channel does not work in a serverless deployment.**
+   `server/routes.ts` attaches a `WebSocketServer` to the HTTP server. Under
+   `npm start` on a long-running host this works normally. In the Vercel
+   serverless handler (`api/index.ts`) the WebSocket server is constructed but
+   never listened on, so chat delivery and live ride tracking fall back to
+   whatever polling the components do. See `docs/DEPLOYMENT.md`.
 
 3. **The migration chain is incomplete.** `migrations/` contains `0001`, `0005`
    and `0006`; `0002` through `0004` are absent. `server/migrate.ts` hardcodes
    only `0001`. The schema cannot be reproduced from this repository alone;
    `npm run db:push` derives it from `shared/schema.ts` instead.
 
-4. **Two of the 63 type errors are not missing-module errors.**
-   `client/src/components/safety/RealTimeTracking.tsx:229` passes a
-   `"success"` variant to `Badge`, which only accepts `default`,
-   `destructive`, `outline` and `secondary` — a real mismatch that will
-   survive restoring the missing files.
-   `client/src/components/notifications/notification-list.tsx:54` has an
-   implicit-`any` parameter that is most likely downstream of the missing
-   `@/lib/ws` module and may resolve on its own once that file is restored.
+4. **One pre-existing type error was fixed to get a clean typecheck.**
+   `RealTimeTracking.tsx:229` passed `variant="success"` to `Badge`, which
+   never defined that variant. The variant was added to `Badge` rather than
+   changing the call site, preserving the intent of showing a completed ride
+   in a success style.
 
 5. **Deployment target.** The WebSocket server rules out a standard Vercel
    serverless deployment for the backend. See `docs/DEPLOYMENT.md`.
