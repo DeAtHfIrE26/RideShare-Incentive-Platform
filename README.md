@@ -70,6 +70,11 @@ node test-db.mjs
 npm run healthcheck     # also asserts DATABASE_URL and SESSION_SECRET are set
 ```
 
+Both attempt a live connection. With placeholder values from `.env.example`
+they emit a large WebSocket `ErrorEvent` dump before reporting unhealthy;
+that is the driver failing to reach the host, not a configuration error in
+the scripts themselves.
+
 Start the dev server:
 
 ```bash
