@@ -47,3 +47,6 @@ generated-icon.png
 
 # Deployment
 .vercel
+
+# Generated serverless bundle (built by npm run build)
+api/
