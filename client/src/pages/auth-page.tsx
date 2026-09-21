@@ -10,9 +10,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
-import { Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
+
+
+/**
+ * Inline failure message for the auth forms. A toast alone is easy to miss on
+ * a form submit, and a silent failure reads as "the button does nothing".
+ */
+function FormError({ error }: { error: Error | null }) {
+  if (!error) return null;
+
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
+    >
+      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{error.message}</span>
+    </div>
+  );
+}
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
@@ -90,6 +109,7 @@ export default function AuthPage() {
                       }
                     />
                   </div>
+                  <FormError error={loginMutation.error} />
                   <Button
                     type="submit"
                     className="w-full"
@@ -182,6 +202,7 @@ export default function AuthPage() {
                       At least 8 characters.
                     </p>
                   </div>
+                  <FormError error={registerMutation.error} />
                   <Button
                     type="submit"
                     className="w-full"
