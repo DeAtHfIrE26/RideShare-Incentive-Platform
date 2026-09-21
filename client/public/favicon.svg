@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="RideShare">
+  <rect width="64" height="64" rx="14" fill="#0F172A"/>
+  <!-- Cabin -->
+  <path d="M17 34 L19.4 25.2 C20.1 22.7 22.4 21 25 21 H39 C41.6 21 43.9 22.7 44.6 25.2 L47 34 Z" fill="#FFFFFF"/>
+  <!-- Body -->
+  <rect x="12" y="32" width="40" height="13" rx="5" fill="#FFFFFF"/>
+  <!-- Wheels -->
+  <circle cx="22" cy="46" r="5.5" fill="#FFFFFF"/>
+  <circle cx="42" cy="46" r="5.5" fill="#FFFFFF"/>
+  <circle cx="22" cy="46" r="2.4" fill="#0F172A"/>
+  <circle cx="42" cy="46" r="2.4" fill="#0F172A"/>
+</svg>

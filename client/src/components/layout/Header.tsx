@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Icons } from "@/components/ui/icons";
+import { Logo } from "@/components/brand/logo";
 import { useAuth } from "@/hooks/use-auth";
 
 export function Header() {
@@ -15,9 +15,8 @@ export function Header() {
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center">
           <Link href="/">
-            <a className="flex items-center gap-2 font-bold text-xl text-primary">
-              <Icons.shield className="h-6 w-6" />
-              <span>CarpoolRewards</span>
+            <a className="text-xl text-primary">
+              <Logo markClassName="h-7 w-7" />
             </a>
           </Link>
         </div>

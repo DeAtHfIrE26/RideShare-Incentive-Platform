@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
+import { Logo, LogoMark } from "@/components/brand/logo";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
@@ -55,7 +56,8 @@ export default function AuthPage() {
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-6">
       <div className="grid w-full max-w-4xl gap-8 md:grid-cols-2">
         <div className="hidden flex-col justify-center md:flex">
-          <h1 className="text-3xl font-semibold">RideShare</h1>
+          <LogoMark className="mb-4 h-14 w-14 text-primary" />
+          <h1 className="text-3xl font-semibold tracking-tight">RideShare</h1>
           <p className="mt-3 text-muted-foreground">
             Share rides, cut travel costs, and earn points for every trip you
             take or offer.
@@ -64,6 +66,7 @@ export default function AuthPage() {
 
         <Card>
           <CardHeader>
+            <Logo className="mb-2 text-primary md:hidden" markClassName="h-7 w-7" />
             <CardTitle>Welcome</CardTitle>
             <CardDescription>
               Sign in to your account or create a new one.

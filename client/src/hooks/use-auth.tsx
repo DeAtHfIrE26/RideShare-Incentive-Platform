@@ -42,7 +42,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || "Login failed");
+
+          // A 5xx means the API itself is failing, not that the credentials
+          // are wrong. Saying "Login failed" for both sends people off
+          // retyping a correct password. The server's own 5xx text is
+          // deliberately vague ("An unexpected error occurred"), so for 5xx
+          // the status is reported instead of that message.
+          if (response.status >= 500) {
+            throw new Error(
+              `Server error (${response.status}). The API is unavailable, so sign-in cannot be completed.`,
+            );
+          }
+
+          const fallback =
+            response.status === 401
+              ? "Incorrect username or password."
+              : "Login failed";
+
+          throw new Error(errorData.message || fallback);
         }
 
         return response.json();
