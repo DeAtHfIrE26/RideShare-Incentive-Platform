@@ -187,3 +187,82 @@ Do not start until the build succeeds locally.
    (`npm run db:push`), then deploy.
 9. Verify `/health`, then an authenticated flow, then a WebSocket connection
    to `/ws`.
+
+---
+
+## 3. Deployment status and what is left
+
+A production deployment exists and is `READY`:
+
+- Project: `ride-share-incentive-platform` (`prj_IE59sSG5XU4zZlrpdyedySlyKWUR`)
+- Deployment: `dpl_Cy5GUhn8KyQajjivbyGZM6M6qZUv`
+- URL: https://ride-share-incentive-platform.vercel.app
+
+### What works
+
+- The build succeeds on Vercel. Both previous deployments (2025-04 and 2025-09)
+  were `ERROR` on the missing `/src/main.tsx`.
+- `GET /` returns 200 with the built client and theme variables injected.
+- Static assets are served.
+- The serverless function is detected and invoked.
+
+### What does not work, and why
+
+`/api/*` and `/health` return 500 `FUNCTION_INVOCATION_FAILED`. The cause is
+not a bug in the function; it is missing configuration. Reproduced locally by
+importing the exact deployed bundle:
+
+```
+$ env -u DATABASE_URL node -e 'import("./api/index.js")'
+MODULE LOAD FAILED: DATABASE_URL must be set. Did you forget to provision a database?
+
+$ DATABASE_URL="postgresql://..." node -e 'import("./api/index.js")'
+MODULE LOADED OK
+```
+
+`server/db.ts` raises at module load without `DATABASE_URL`, which crashes the
+function on cold start before any route runs.
+
+### Remaining manual steps
+
+These could not be done from this session: the Vercel token used here has
+deploy access but not project-settings or environment-variable write access.
+Both attempts returned 403 (`projectEnvVars` create, `project` update).
+
+1. **Provision a PostgreSQL database.** Neon is the natural fit since the code
+   already uses `@neondatabase/serverless`. Use a pooled connection string.
+
+2. **Set environment variables** in Project Settings → Environment Variables,
+   for Production (and Preview if wanted):
+
+   | Variable | Value |
+   | --- | --- |
+   | `DATABASE_URL` | the pooled Postgres connection string |
+   | `SESSION_SECRET` | a random 32-byte hex, e.g. `openssl rand -hex 32` |
+
+3. **Apply the schema** against that database, from a clone with the same
+   `DATABASE_URL` in `.env`:
+
+   ```bash
+   npm run db:push
+   ```
+
+4. **Redeploy** so the function picks up the variables. Environment variable
+   changes do not apply to an existing deployment.
+
+5. **Disable Vercel Authentication** if the URL is meant to be publicly
+   reachable. The project currently has `ssoProtection` enabled with
+   `prod_deployment_urls_and_all_previews`, so the production URL requires a
+   Vercel login with team access. Project Settings → Deployment Protection →
+   Vercel Authentication → off.
+
+6. **Verify**, in order: `/health` should report `healthy` / `connected`;
+   register an account; publish a ride; book it.
+
+### Note on the /ws channel
+
+Chat delivery and live ride tracking connect to `/ws`. That WebSocket server is
+not listened on in the serverless handler, so those features will not receive
+pushed updates on Vercel even once the database is configured. `npm start` on a
+long-running host (Railway, Render, Fly.io) runs the same code with working
+WebSockets.
