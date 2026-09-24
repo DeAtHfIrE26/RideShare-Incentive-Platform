@@ -24,10 +24,11 @@ async function countRows(
 
 async function main() {
   const config = loadConfig();
-  const { pool, db } = connect();
+  const { pool, db, driver } = connect();
   const like = `${config.usernamePrefix}%`;
 
   console.log(`target   ${describeTarget()}`);
+  console.log(`driver   ${driver}`);
   console.log(`matching users LIKE '${like}'\n`);
 
   try {

@@ -60,8 +60,9 @@ async function main() {
     return;
   }
 
-  const { pool, db } = connect();
+  const { pool, db, driver } = connect();
   console.log(`\ntarget             ${describeTarget()}`);
+  console.log(`driver             ${driver}`);
 
   // Hashing is the slowest part of the run and every demo account shares the
   // same password, so the hash is computed once rather than per user.
