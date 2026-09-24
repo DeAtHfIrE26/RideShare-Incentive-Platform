@@ -687,8 +687,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const userId = req.user.id;
     
     try {
-      // Find rides where user is driver
-      const driverRides = await storage.listUserDrivingRides(userId);
+      // Find rides where user is driver. listUserDrivingRides returns every
+      // state, so restrict to live ones here - the same filter already applied
+      // to the passenger side below.
+      const driverRides = (await storage.listUserDrivingRides(userId)).filter(
+        (ride) => ride.status === "pending" || ride.status === "in_progress",
+      );
       
       // Find rides where user is passenger
       const userBookings = await storage.listUserBookings(userId);

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { formatCurrency } from "@/lib/currency";
 import { apiRequest } from "@/lib/queryClient";
 import type { Ride } from "@shared/schema";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -139,7 +140,7 @@ export default function RideCard({ ride }: RideCardProps) {
               </div>
               <div className="flex items-center gap-2">
                 <CreditCard className="h-4 w-4 text-muted-foreground" />
-                <span className="font-medium">${Number(ride.price).toFixed(2)}</span>
+                <span className="font-medium">{formatCurrency(ride.price)}</span>
                 {getStatusBadge()}
               </div>
             </div>
@@ -213,12 +214,12 @@ export default function RideCard({ ride }: RideCardProps) {
             
             <div className="flex items-center gap-2">
               <span className="text-sm">Price per seat:</span>
-              <span className="font-medium">${Number(ride.price).toFixed(2)}</span>
+              <span className="font-medium">{formatCurrency(ride.price)}</span>
             </div>
             
             <div className="flex items-center gap-2">
               <span className="text-sm">Total price:</span>
-              <span className="font-medium">${(Number(ride.price) * seatsToBook).toFixed(2)}</span>
+              <span className="font-medium">{formatCurrency(Number(ride.price) * seatsToBook)}</span>
             </div>
             
             <div className="flex items-center gap-2">

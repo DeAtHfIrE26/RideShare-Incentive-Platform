@@ -817,15 +817,20 @@ export async function updateUserEmergencyContact(userId: number, contactId: numb
 }
 
 // Enhanced ride querying methods
+/**
+ * Every ride the user is driving, in any state.
+ *
+ * This previously returned only pending and in_progress rides despite its
+ * name. /api/user/stats then filtered that result for status "completed",
+ * which could never match, so ridesAsDriver reported 0 for every driver and
+ * the driver share of co2SavedKg and distanceTraveledKm was always lost.
+ *
+ * Callers that want only live rides filter for themselves; /api/rides/active
+ * does so explicitly, as it already did for the passenger side.
+ */
 export async function listUserDrivingRides(userId: number) {
   return db.query.rides.findMany({
-    where: and(
-      eq(rides.driverId, userId),
-      or(
-        eq(rides.status, "pending"),
-        eq(rides.status, "in_progress")
-      )
-    ),
+    where: eq(rides.driverId, userId),
     orderBy: [desc(rides.departureTime)]
   });
 }

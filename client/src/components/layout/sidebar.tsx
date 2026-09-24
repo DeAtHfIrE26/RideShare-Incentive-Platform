@@ -68,7 +68,7 @@ export default function Sidebar() {
         {!collapsed && (
           <>
             <Car className="h-6 w-6 text-primary" />
-            <span className="font-semibold text-lg ml-2 flex-1">Kary</span>
+            <span className="font-semibold text-lg ml-2 flex-1">RideShare</span>
           </>
         )}
         {collapsed && !isMobile && <Car className="h-6 w-6 mx-auto text-primary" />}

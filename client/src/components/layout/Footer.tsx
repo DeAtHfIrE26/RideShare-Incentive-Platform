@@ -10,7 +10,7 @@ export function Footer() {
             <Link href="/">
               <a className="flex items-center gap-2 font-bold text-lg text-primary">
                 <Icons.shield className="h-5 w-5" />
-                <span>CarpoolRewards</span>
+                <span>RideShare</span>
               </a>
             </Link>
           </div>
@@ -44,7 +44,7 @@ export function Footer() {
         </div>
         
         <div className="mt-8 pt-4 border-t text-center text-xs text-muted-foreground">
-          <p>© {new Date().getFullYear()} CarpoolRewards. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} RideShare. All rights reserved.</p>
         </div>
       </div>
     </footer>

@@ -858,13 +858,7 @@ async function updateUserEmergencyContact(userId, contactId) {
 }
 async function listUserDrivingRides(userId) {
   return db.query.rides.findMany({
-    where: and(
-      eq(rides.driverId, userId),
-      or(
-        eq(rides.status, "pending"),
-        eq(rides.status, "in_progress")
-      )
-    ),
+    where: eq(rides.driverId, userId),
     orderBy: [desc(rides.departureTime)]
   });
 }
@@ -1648,7 +1642,9 @@ async function registerRoutes(app2) {
   app2.get("/api/rides/active", requireAuthMiddleware, async (req, res) => {
     const userId = req.user.id;
     try {
-      const driverRides = await storage.listUserDrivingRides(userId);
+      const driverRides = (await storage.listUserDrivingRides(userId)).filter(
+        (ride) => ride.status === "pending" || ride.status === "in_progress"
+      );
       const userBookings = await storage.listUserBookings(userId);
       const passengerRideIds = userBookings.filter((booking) => booking.status === "confirmed" || booking.status === "pending").map((booking) => booking.rideId);
       const passengerRides = [];
