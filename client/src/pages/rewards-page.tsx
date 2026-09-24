@@ -16,7 +16,7 @@ export default function RewardsPage() {
 
   return (
     <PageLayout>
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <h1 className="text-2xl font-semibold">Rewards</h1>
         <p className="mt-1 text-muted-foreground">
           Points earned from rides and safety verifications.

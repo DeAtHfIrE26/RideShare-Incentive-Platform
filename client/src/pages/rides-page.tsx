@@ -137,7 +137,7 @@ export default function RidesPage() {
 
   return (
     <PageLayout>
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold">Rides</h1>

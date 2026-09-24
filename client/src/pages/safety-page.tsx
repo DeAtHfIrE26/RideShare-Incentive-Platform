@@ -9,6 +9,7 @@ import type { Ride } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin } from "lucide-react";
 import { useState } from "react";
+import { formatStatus } from "@/lib/status";
 
 export function SafetyPage() {
   const { user } = useAuth();
@@ -23,7 +24,7 @@ export function SafetyPage() {
   if (trackingRideId !== null) {
     return (
       <PageLayout showFooter={false}>
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <RealTimeTracking
             rideId={trackingRideId}
             isDriver={trackedRide?.driverId === user?.id}
@@ -36,7 +37,7 @@ export function SafetyPage() {
 
   return (
     <PageLayout>
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <h1 className="text-2xl font-semibold">Safety</h1>
         <p className="mt-1 text-muted-foreground">
           Trusted contacts, alerts, and live tracking for your active rides.
@@ -61,7 +62,7 @@ export function SafetyPage() {
                         {ride.origin} to {ride.destination}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {ride.status ?? "scheduled"}
+                        {formatStatus(ride.status, "Scheduled")}
                       </p>
                     </div>
                     <Button

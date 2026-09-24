@@ -106,47 +106,47 @@ export default function RideCard({ ride }: RideCardProps) {
       <Card className="transition-all duration-200 hover:shadow-md">
         <CardContent className="pt-6">
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <MapPin className="h-4 w-4" />
+                  <MapPin className="h-4 w-4 shrink-0" />
                   From
                 </div>
-                <p className="font-medium">{ride.origin}</p>
+                <p className="break-words font-medium">{ride.origin}</p>
               </div>
-              <div className="space-y-1 text-right">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground justify-end">
-                  <MapPin className="h-4 w-4" />
+              <div className="min-w-0 space-y-1 text-right">
+                <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
+                  <MapPin className="h-4 w-4 shrink-0" />
                   To
                 </div>
-                <p className="font-medium">{ride.destination}</p>
+                <p className="break-words font-medium">{ride.destination}</p>
               </div>
             </div>
 
-            <div className="flex justify-between items-center pt-2 border-t">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t pt-2">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">
+                  <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="whitespace-nowrap text-sm">
                     {format(new Date(ride.departureTime), "MMM d, h:mm a")}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">
+                  <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="whitespace-nowrap text-sm">
                     {ride.seatsAvailable} {ride.seatsAvailable === 1 ? "seat" : "seats"} left
                   </span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                <CreditCard className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="font-medium">{formatCurrency(ride.price)}</span>
                 {getStatusBadge()}
               </div>
             </div>
             
             {ride.carModel && (
-              <div className="text-sm text-muted-foreground pt-2 border-t">
+              <div className="break-words border-t pt-2 text-sm text-muted-foreground">
                 <span className="font-medium">Car:</span> {ride.carModel} {ride.carColor && `(${ride.carColor})`}
                 {ride.licensePlate && ` • License: ${ride.licensePlate}`}
               </div>

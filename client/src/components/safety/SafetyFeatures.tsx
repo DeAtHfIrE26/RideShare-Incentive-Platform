@@ -35,6 +35,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Icons } from "@/components/ui/icons";
 import { fetchWithAuth } from "@/lib/auth-fetch";
+import { formatStatus } from "@/lib/status";
 
 // Alert type enum matching server-side
 export enum AlertType {
@@ -456,7 +457,7 @@ export function SafetyFeatures({ rideId }: { rideId?: number }) {
                           <p className="text-sm text-muted-foreground">{alert.details}</p>
                         </div>
                         <Badge variant={alert.status === "active" ? "destructive" : "outline"}>
-                          {alert.status}
+                          {formatStatus(alert.status)}
                         </Badge>
                       </div>
                     </div>

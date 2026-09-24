@@ -66,7 +66,7 @@ export default function HomePage() {
 
   return (
     <PageLayout>
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <h1 className="text-2xl font-semibold">
           Welcome back{user?.fullName ? `, ${user.fullName}` : ""}
         </h1>

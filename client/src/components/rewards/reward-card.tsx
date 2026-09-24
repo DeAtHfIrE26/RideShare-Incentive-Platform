@@ -11,21 +11,21 @@ interface RewardCardProps {
 export default function RewardCard({ reward }: RewardCardProps) {
   return (
     <Card>
-      <CardContent className="flex items-center justify-between p-6">
-        <div className="flex items-center gap-4">
-          <div className="rounded-full p-3 bg-primary/10">
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 p-6">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="shrink-0 rounded-full bg-primary/10 p-3">
             <Gift className="h-6 w-6 text-primary" />
           </div>
-          <div>
-            <h3 className="font-medium">{reward.description}</h3>
+          <div className="min-w-0">
+            <h3 className="break-words font-medium">{reward.description}</h3>
             <p className="text-sm text-muted-foreground">
               {format(new Date(reward.createdAt!), "MMM d, yyyy")}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Badge variant="secondary">{reward.type}</Badge>
-          <p className="font-semibold">+{reward.points} points</p>
+        <div className="flex shrink-0 items-center gap-3">
+          <Badge variant="secondary" className="break-all">{reward.type}</Badge>
+          <p className="whitespace-nowrap font-semibold">+{reward.points} points</p>
         </div>
       </CardContent>
     </Card>

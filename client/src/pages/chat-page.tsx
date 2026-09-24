@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { Booking } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { formatStatus } from "@/lib/status";
 
 /**
  * Mirrors the ExtendedBooking shape chat-window expects: a booking plus the
@@ -34,7 +35,7 @@ export default function ChatPage() {
 
   return (
     <PageLayout showFooter={false}>
-      <div className="grid h-full gap-4 p-6 lg:grid-cols-[320px_1fr]">
+      <div className="grid gap-4 p-4 sm:p-6 lg:grid-cols-[320px_1fr] lg:items-start">
         <div className="space-y-4">
           <Card>
             <CardHeader>
@@ -64,7 +65,7 @@ export default function ChatPage() {
                           : `Booking #${booking.id}`}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {booking.status ?? "pending"}
+                        {formatStatus(booking.status, "Pending")}
                       </p>
                     </div>
                   </Button>
@@ -77,17 +78,10 @@ export default function ChatPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Notifications</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <NotificationList />
-            </CardContent>
-          </Card>
+          <NotificationList />
         </div>
 
-        <Card className="flex min-h-[28rem] flex-col">
+        <Card className="flex min-h-[28rem] flex-col lg:sticky lg:top-20 lg:h-[calc(100vh-7rem)]">
           {selected ? (
             <ChatWindow selectedUser={null} selectedBooking={selected} />
           ) : (

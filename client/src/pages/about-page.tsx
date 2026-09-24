@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import PageLayout from "@/components/layout/PageLayout";
 
 const SECTIONS = [
   {
@@ -21,25 +22,27 @@ const SECTIONS = [
 
 export default function AboutPage() {
   return (
-    <div className="mx-auto w-full max-w-3xl p-6">
-      <h1 className="mb-2 text-2xl font-semibold">About this platform</h1>
-      <p className="mb-8 text-muted-foreground">
-        A carpooling application pairing ride sharing with a points-based
-        incentive system.
-      </p>
+    <PageLayout>
+      <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
+        <h1 className="mb-2 text-2xl font-semibold">About this platform</h1>
+        <p className="mb-8 text-muted-foreground">
+          A carpooling application pairing ride sharing with a points-based
+          incentive system.
+        </p>
 
-      <div className="grid gap-4">
-        {SECTIONS.map((section) => (
-          <Card key={section.title}>
-            <CardHeader>
-              <CardTitle className="text-lg">{section.title}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-muted-foreground">
-              {section.body}
-            </CardContent>
-          </Card>
-        ))}
+        <div className="grid gap-4">
+          {SECTIONS.map((section) => (
+            <Card key={section.title}>
+              <CardHeader>
+                <CardTitle className="text-lg">{section.title}</CardTitle>
+              </CardHeader>
+              <CardContent className="text-muted-foreground">
+                {section.body}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
-    </div>
+    </PageLayout>
   );
 }

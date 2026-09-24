@@ -8,6 +8,7 @@ import type { User } from "@shared/schema";
 import { format } from "date-fns";
 import { AlertCircle, CheckCircle2, Clock, MoreHorizontal, PhoneCall, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { formatStatus } from "@/lib/status";
 
 // Extended Booking type to match the one defined in chat-page.tsx
 type ExtendedBooking = {
@@ -430,7 +431,7 @@ export default function ChatWindow({ selectedUser, selectedBooking }: ChatWindow
                   {selectedBooking.ride?.origin?.substring(0, 10)} → {selectedBooking.ride?.destination?.substring(0, 10)}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  {selectedBooking.ride?.date ? format(new Date(selectedBooking.ride.date), 'MMM d, h:mm a') : 'No date'} • {selectedBooking.status}
+                  {selectedBooking.ride?.date ? format(new Date(selectedBooking.ride.date), 'MMM d, h:mm a') : 'No date'} • {formatStatus(selectedBooking.status)}
                 </p>
               </div>
             </div>

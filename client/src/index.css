@@ -3,6 +3,32 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * Sidebar palette.
+   *
+   * tailwind.config.ts maps bg-sidebar, text-sidebar-foreground,
+   * bg-sidebar-accent and the rest onto hsl(var(--sidebar-*)), but nothing ever
+   * defined those variables. Every one resolved to an invalid colour, so the
+   * rail had no background of its own — harmless over the page, but it made the
+   * mobile navigation sheet see-through — and the active navigation item
+   * rendered with exactly the same transparent background as the inactive ones,
+   * leaving no indication anywhere of which page you were on.
+   *
+   * Each is an alias of a token the theme already defines, so they resolve
+   * against whichever :root or .dark block is in scope and cannot drift out of
+   * step with the rest of the palette.
+   */
+  :root {
+    --sidebar-background: var(--background);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--accent-foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+  }
+
   * {
     @apply border-border;
   }

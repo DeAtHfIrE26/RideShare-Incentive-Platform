@@ -55,7 +55,7 @@ export default function ProfilePage() {
 
   return (
     <PageLayout>
-      <div className="mx-auto w-full max-w-3xl p-6">
+      <div className="mx-auto w-full max-w-3xl p-4 sm:p-6">
         <h1 className="text-2xl font-semibold">Profile</h1>
 
         <Card className="mt-6">
