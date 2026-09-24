@@ -5,7 +5,11 @@ var __export = (target, all) => {
 };
 
 // server/serverless.ts
+import { sql as sql2 } from "drizzle-orm";
 import express from "express";
+
+// server/db.ts
+import { Pool, neonConfig } from "@neondatabase/serverless";
 
 // shared/schema.ts
 var schema_exports = {};
@@ -300,6 +304,20 @@ var insertReviewSchema = createInsertSchema(reviews).pick({
   comment: z.string().optional()
 });
 
+// server/db.ts
+import dotenv from "dotenv";
+import { drizzle } from "drizzle-orm/neon-serverless";
+import ws from "ws";
+dotenv.config();
+neonConfig.webSocketConstructor = ws;
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL must be set. Did you forget to provision a database?"
+  );
+}
+var pool = new Pool({ connectionString: process.env.DATABASE_URL });
+var db = drizzle({ client: pool, schema: schema_exports });
+
 // server/routes.ts
 import { createServer } from "http";
 import { WebSocket as WebSocket2, WebSocketServer } from "ws";
@@ -315,23 +333,6 @@ import connectPg from "connect-pg-simple";
 import { and, desc, eq, or } from "drizzle-orm";
 import { sql } from "drizzle-orm/sql";
 import session from "express-session";
-
-// server/db.ts
-import { Pool, neonConfig } from "@neondatabase/serverless";
-import dotenv from "dotenv";
-import { drizzle } from "drizzle-orm/neon-serverless";
-import ws from "ws";
-dotenv.config();
-neonConfig.webSocketConstructor = ws;
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?"
-  );
-}
-var pool = new Pool({ connectionString: process.env.DATABASE_URL });
-var db = drizzle({ client: pool, schema: schema_exports });
-
-// server/storage.ts
 var PostgresSessionStore = connectPg(session);
 var DatabaseStorage = class {
   sessionStore;
@@ -1814,6 +1815,22 @@ var initialised = null;
 function ensureInitialised() {
   if (!initialised) {
     initialised = registerRoutes(app).then(() => {
+      app.get("/health", (_req, res) => {
+        db.execute(sql2`SELECT 1`).then(() => {
+          res.status(200).json({
+            status: "healthy",
+            database: "connected",
+            environment: process.env.NODE_ENV || "development"
+          });
+        }).catch((err) => {
+          console.error("Health check database error:", err);
+          res.status(500).json({
+            status: "unhealthy",
+            database: "disconnected",
+            error: "Database connection failed"
+          });
+        });
+      });
       app.use(
         (err, _req, res, _next) => {
           console.error("Unhandled error:", err);

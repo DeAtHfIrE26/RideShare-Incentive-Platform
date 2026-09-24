@@ -14,9 +14,11 @@
  * realtime channel used by chat and live tracking does not run in a serverless
  * function and needs either Vercel's WebSocket support or a long-running host.
  */
+import { sql } from "drizzle-orm";
 import express from "express";
 import type { IncomingMessage, ServerResponse } from "http";
-import { registerRoutes } from "../server/routes";
+import { db } from "./db";
+import { registerRoutes } from "./routes";
 
 const app = express();
 
@@ -31,6 +33,28 @@ let initialised: Promise<void> | null = null;
 function ensureInitialised(): Promise<void> {
   if (!initialised) {
     initialised = registerRoutes(app).then(() => {
+      // server/index.ts registers /health on the long-running server. That file
+      // is not used here, so the route is registered again for this entrypoint;
+      // without it /health 404s in production.
+      app.get("/health", (_req, res) => {
+        db.execute(sql`SELECT 1`)
+          .then(() => {
+            res.status(200).json({
+              status: "healthy",
+              database: "connected",
+              environment: process.env.NODE_ENV || "development",
+            });
+          })
+          .catch((err) => {
+            console.error("Health check database error:", err);
+            res.status(500).json({
+              status: "unhealthy",
+              database: "disconnected",
+              error: "Database connection failed",
+            });
+          });
+      });
+
       app.use(
         (
           err: Error,
