@@ -108,6 +108,7 @@ async function main() {
           preferences: r.preferences,
           routeDetails: r.routeDetails,
           estimatedDuration: r.estimatedDuration,
+          distanceKm: String(r.distanceKm),
           createdAt: r.createdAt,
         })),
       ).returning({ id: rides.id });

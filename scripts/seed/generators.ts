@@ -42,6 +42,8 @@ export interface PlannedRide {
   preferences: string;
   routeDetails: string;
   estimatedDuration: string;
+  /** Real corridor length, used by the emissions calculation. */
+  distanceKm: number;
   createdAt: Date;
 }
 
@@ -153,6 +155,7 @@ export function generateRides(
         .join(", "),
       routeDetails: `${corridor.distanceKm} km via the ${corridor.origin}-${corridor.destination} highway`,
       estimatedDuration: corridor.duration,
+      distanceKm: corridor.distanceKm,
       // Rides are published somewhere between a day and three weeks ahead.
       createdAt: new Date(
         departureTime.getTime() - faker.number.int({ min: 1, max: 21 }) * 86_400_000,

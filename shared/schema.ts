@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, decimal, integer, json, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, decimal, index, integer, json, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -40,8 +40,18 @@ export const rides = pgTable("rides", {
   preferences: text("preferences"), // e.g., "no smoking", "music", etc.
   routeDetails: text("route_details"),
   estimatedDuration: text("estimated_duration"),
+  /**
+   * Route length in kilometres. Required for any honest emissions or distance
+   * figure: the dashboard previously multiplied ride counts by invented
+   * constants because the real distance was not stored anywhere.
+   */
+  distanceKm: decimal("distance_km"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  // Browsing open rides orders by departure and filters on status.
+  statusDepartureIdx: index("rides_status_departure_idx").on(table.status, table.departureTime),
+  driverIdx: index("rides_driver_id_idx").on(table.driverId),
+}));
 
 export const bookings = pgTable("bookings", {
   id: serial("id").primaryKey(),
@@ -54,7 +64,12 @@ export const bookings = pgTable("bookings", {
   dropoffLocation: text("dropoff_location"),
   paymentStatus: text("payment_status").default("pending"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  rideIdx: index("bookings_ride_id_idx").on(table.rideId),
+  userIdx: index("bookings_user_id_idx").on(table.userId),
+  // "has this user already booked this ride" is checked on every booking.
+  rideUserIdx: index("bookings_ride_user_idx").on(table.rideId, table.userId),
+}));
 
 export const rewards = pgTable("rewards", {
   id: serial("id").primaryKey(),
@@ -64,7 +79,9 @@ export const rewards = pgTable("rewards", {
   description: text("description").notNull(),
   expiryDate: timestamp("expiry_date"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  userIdx: index("rewards_user_id_idx").on(table.userId),
+}));
 
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
@@ -74,7 +91,12 @@ export const messages = pgTable("messages", {
   rideId: integer("ride_id").references(() => rides.id),
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  senderIdx: index("messages_sender_id_idx").on(table.senderId),
+  // Unread counts poll this pair every 30 seconds from the sidebar.
+  receiverReadIdx: index("messages_receiver_read_idx").on(table.receiverId, table.isRead),
+  rideIdx: index("messages_ride_id_idx").on(table.rideId),
+}));
 
 // Reviews for both drivers and passengers
 export const reviews = pgTable("reviews", {
@@ -85,7 +107,10 @@ export const reviews = pgTable("reviews", {
   rating: decimal("rating").notNull(),
   comment: text("comment"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  reviewedIdx: index("reviews_reviewed_id_idx").on(table.reviewedId),
+  reviewerIdx: index("reviews_reviewer_id_idx").on(table.reviewerId),
+}));
 
 // New safety-related tables
 
@@ -102,7 +127,11 @@ export const safetyAlerts = pgTable("safety_alerts", {
   resolvedBy: integer("resolved_by").references(() => users.id),
   resolvedAt: timestamp("resolved_at"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  userIdx: index("safety_alerts_user_id_idx").on(table.userId),
+  rideIdx: index("safety_alerts_ride_id_idx").on(table.rideId),
+  statusIdx: index("safety_alerts_status_idx").on(table.status),
+}));
 
 export const trustedContacts = pgTable("trusted_contacts", {
   id: serial("id").primaryKey(),
@@ -113,7 +142,9 @@ export const trustedContacts = pgTable("trusted_contacts", {
   relationship: text("relationship").notNull(),
   isEmergencyContact: boolean("is_emergency_contact").default(false),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  userIdx: index("trusted_contacts_user_id_idx").on(table.userId),
+}));
 
 export const safetyZones = pgTable("safety_zones", {
   id: serial("id").primaryKey(),
@@ -271,8 +302,16 @@ export const insertRideSchema = createInsertSchema(rides)
     carColor: true,
     licensePlate: true,
     preferences: true,
+    distanceKm: true,
   })
   .extend({
+    // Optional: a ride without a known distance is excluded from emissions and
+    // distance statistics rather than having a value invented for it.
+    distanceKm: z
+      .number()
+      .positive("Distance must be greater than zero")
+      .max(5000, "Distance looks implausible")
+      .optional(),
     origin: z.string().min(1, "Origin is required").max(100),
     destination: z.string().min(1, "Destination is required").max(100),
     departureTime: z.string().refine((val) => {

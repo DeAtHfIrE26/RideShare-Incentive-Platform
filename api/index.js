@@ -39,7 +39,7 @@ __export(schema_exports, {
   usersRelations: () => usersRelations
 });
 import { relations } from "drizzle-orm";
-import { boolean, decimal, integer, json, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, decimal, index, integer, json, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 var users = pgTable("users", {
@@ -78,8 +78,18 @@ var rides = pgTable("rides", {
   // e.g., "no smoking", "music", etc.
   routeDetails: text("route_details"),
   estimatedDuration: text("estimated_duration"),
+  /**
+   * Route length in kilometres. Required for any honest emissions or distance
+   * figure: the dashboard previously multiplied ride counts by invented
+   * constants because the real distance was not stored anywhere.
+   */
+  distanceKm: decimal("distance_km"),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => ({
+  // Browsing open rides orders by departure and filters on status.
+  statusDepartureIdx: index("rides_status_departure_idx").on(table.status, table.departureTime),
+  driverIdx: index("rides_driver_id_idx").on(table.driverId)
+}));
 var bookings = pgTable("bookings", {
   id: serial("id").primaryKey(),
   rideId: integer("ride_id").references(() => rides.id),
@@ -91,7 +101,12 @@ var bookings = pgTable("bookings", {
   dropoffLocation: text("dropoff_location"),
   paymentStatus: text("payment_status").default("pending"),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => ({
+  rideIdx: index("bookings_ride_id_idx").on(table.rideId),
+  userIdx: index("bookings_user_id_idx").on(table.userId),
+  // "has this user already booked this ride" is checked on every booking.
+  rideUserIdx: index("bookings_ride_user_idx").on(table.rideId, table.userId)
+}));
 var rewards = pgTable("rewards", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id),
@@ -100,7 +115,9 @@ var rewards = pgTable("rewards", {
   description: text("description").notNull(),
   expiryDate: timestamp("expiry_date"),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => ({
+  userIdx: index("rewards_user_id_idx").on(table.userId)
+}));
 var messages = pgTable("messages", {
   id: serial("id").primaryKey(),
   senderId: integer("sender_id").references(() => users.id),
@@ -109,7 +126,12 @@ var messages = pgTable("messages", {
   rideId: integer("ride_id").references(() => rides.id),
   isRead: boolean("is_read").default(false),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => ({
+  senderIdx: index("messages_sender_id_idx").on(table.senderId),
+  // Unread counts poll this pair every 30 seconds from the sidebar.
+  receiverReadIdx: index("messages_receiver_read_idx").on(table.receiverId, table.isRead),
+  rideIdx: index("messages_ride_id_idx").on(table.rideId)
+}));
 var reviews = pgTable("reviews", {
   id: serial("id").primaryKey(),
   reviewerId: integer("reviewer_id").references(() => users.id),
@@ -118,7 +140,10 @@ var reviews = pgTable("reviews", {
   rating: decimal("rating").notNull(),
   comment: text("comment"),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => ({
+  reviewedIdx: index("reviews_reviewed_id_idx").on(table.reviewedId),
+  reviewerIdx: index("reviews_reviewer_id_idx").on(table.reviewerId)
+}));
 var safetyAlerts = pgTable("safety_alerts", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id),
@@ -132,7 +157,11 @@ var safetyAlerts = pgTable("safety_alerts", {
   resolvedBy: integer("resolved_by").references(() => users.id),
   resolvedAt: timestamp("resolved_at"),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => ({
+  userIdx: index("safety_alerts_user_id_idx").on(table.userId),
+  rideIdx: index("safety_alerts_ride_id_idx").on(table.rideId),
+  statusIdx: index("safety_alerts_status_idx").on(table.status)
+}));
 var trustedContacts = pgTable("trusted_contacts", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id),
@@ -142,7 +171,9 @@ var trustedContacts = pgTable("trusted_contacts", {
   relationship: text("relationship").notNull(),
   isEmergencyContact: boolean("is_emergency_contact").default(false),
   createdAt: timestamp("created_at").defaultNow()
-});
+}, (table) => ({
+  userIdx: index("trusted_contacts_user_id_idx").on(table.userId)
+}));
 var safetyZones = pgTable("safety_zones", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -270,8 +301,12 @@ var insertRideSchema = createInsertSchema(rides).pick({
   carModel: true,
   carColor: true,
   licensePlate: true,
-  preferences: true
+  preferences: true,
+  distanceKm: true
 }).extend({
+  // Optional: a ride without a known distance is excluded from emissions and
+  // distance statistics rather than having a value invented for it.
+  distanceKm: z.number().positive("Distance must be greater than zero").max(5e3, "Distance looks implausible").optional(),
   origin: z.string().min(1, "Origin is required").max(100),
   destination: z.string().min(1, "Destination is required").max(100),
   departureTime: z.string().refine((val) => {
@@ -380,7 +415,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 
 // server/storage.ts
 import connectPg from "connect-pg-simple";
-import { and, desc, eq, gte, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { sql } from "drizzle-orm/sql";
 import session from "express-session";
 var PostgresSessionStore = connectPg(session);
@@ -603,8 +638,20 @@ var DatabaseStorage = class {
     const [ride] = await db.select().from(rides).where(eq(rides.id, id));
     return ride;
   }
-  async listRides() {
-    return db.select().from(rides).orderBy(desc(rides.createdAt));
+  /**
+   * A page of rides, newest first.
+   *
+   * This was an unbounded `SELECT * FROM rides`: every row went over the wire
+   * and into the browser on each load, so response size and render cost grew
+   * without limit as the table filled. Callers now pass a window and receive
+   * the total alongside it.
+   */
+  async listRides(options = { limit: 20, offset: 0 }) {
+    return db.select().from(rides).orderBy(desc(rides.createdAt)).limit(options.limit).offset(options.offset);
+  }
+  async countRides() {
+    const [row] = await db.select({ count: sql`count(*)::int` }).from(rides);
+    return Number(row?.count ?? 0);
   }
   async updateRideStatus(rideId, status) {
     const [updatedRide] = await db.update(rides).set({ status }).where(eq(rides.id, rideId)).returning();
@@ -623,6 +670,38 @@ var DatabaseStorage = class {
    * ride when the reservation succeeded, or null when there were not enough
    * seats left, which is how the caller detects losing the race.
    */
+  /**
+   * Fetches many rides in one query.
+   *
+   * Several routes resolved rides by looping `await getRide(id)` over a list of
+   * bookings, which issues one round trip per booking. At Singapore latency
+   * from a US function that is the dominant cost of those endpoints.
+   */
+  async getRidesByIds(ids) {
+    if (ids.length === 0) return [];
+    const unique = Array.from(new Set(ids));
+    return db.select().from(rides).where(inArray(rides.id, unique));
+  }
+  /**
+   * Seats confirmed or completed per ride, aggregated in the database rather
+   * than by loading every booking row into the process.
+   */
+  async countConfirmedSeatsByRide(rideIds) {
+    if (rideIds.length === 0) return /* @__PURE__ */ new Map();
+    const unique = Array.from(new Set(rideIds));
+    const rows = await db.select({
+      rideId: bookings.rideId,
+      seats: sql`COALESCE(SUM(${bookings.seats}), 0)::int`
+    }).from(bookings).where(
+      and(
+        inArray(bookings.rideId, unique),
+        inArray(bookings.status, ["confirmed", "completed"])
+      )
+    ).groupBy(bookings.rideId);
+    return new Map(
+      rows.filter((row) => row.rideId !== null).map((row) => [row.rideId, Number(row.seats)])
+    );
+  }
   async reserveRideSeats(rideId, seats) {
     const [updated] = await db.update(rides).set({
       seatsAvailable: sql`${rides.seatsAvailable} - ${seats}`,
@@ -1130,8 +1209,72 @@ var safetyServices = {
   }
 };
 
+// server/pagination.ts
+var DEFAULT_PAGE_SIZE = 20;
+var MAX_PAGE_SIZE = 100;
+function readPageParams(req) {
+  const rawLimit = Number(req.query.limit);
+  const rawOffset = Number(req.query.offset);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
+  const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? Math.floor(rawOffset) : 0;
+  return { limit, offset };
+}
+function buildPage(items, total, params) {
+  return {
+    items,
+    total,
+    limit: params.limit,
+    offset: params.offset,
+    hasMore: params.offset + items.length < total
+  };
+}
+
 // server/routes.ts
 import { ZodError } from "zod";
+
+// shared/emissions.ts
+var DEFAULT_EMISSION_FACTOR_KG_PER_KM = 0.15;
+function resolveEmissionFactor(raw) {
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_EMISSION_FACTOR_KG_PER_KM;
+}
+var round = (value) => Math.round(value * 100) / 100;
+function calculateEmissions(tripsAsPassenger, drives, emissionFactor = DEFAULT_EMISSION_FACTOR_KG_PER_KM) {
+  let savedKg = 0;
+  let enabledKg = 0;
+  let distanceKm = 0;
+  let ridesWithoutDistance = 0;
+  for (const trip of tripsAsPassenger) {
+    if (trip.distanceKm === null || !Number.isFinite(trip.distanceKm) || trip.distanceKm <= 0) {
+      ridesWithoutDistance++;
+      continue;
+    }
+    savedKg += trip.distanceKm * emissionFactor;
+    distanceKm += trip.distanceKm;
+  }
+  for (const drive of drives) {
+    if (drive.distanceKm === null || !Number.isFinite(drive.distanceKm) || drive.distanceKm <= 0) {
+      ridesWithoutDistance++;
+      continue;
+    }
+    distanceKm += drive.distanceKm;
+    enabledKg += Math.max(0, drive.passengerSeats) * drive.distanceKm * emissionFactor;
+  }
+  return {
+    savedKg: round(savedKg),
+    enabledKg: round(enabledKg),
+    totalImpactKg: round(savedKg + enabledKg),
+    distanceKm: round(distanceKm),
+    ridesWithoutDistance
+  };
+}
+
+// server/routes.ts
+function toKm(value) {
+  if (value === null || value === void 0) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
 function validationError(error) {
   if (error instanceof ZodError) {
     return {
@@ -1167,6 +1310,7 @@ async function registerRoutes(app2) {
         status: "pending",
         routeDetails: "",
         estimatedDuration: "",
+        distanceKm: rideData.distanceKm === void 0 ? null : String(rideData.distanceKm),
         carModel: rideData.carModel || null,
         carColor: rideData.carColor || null,
         licensePlate: rideData.licensePlate || null,
@@ -1193,8 +1337,12 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/rides", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const rides2 = await storage.listRides();
-    res.json(rides2);
+    const params = readPageParams(req);
+    const [rides2, total] = await Promise.all([
+      storage.listRides(params),
+      storage.countRides()
+    ]);
+    res.json(buildPage(rides2, total, params));
   });
   app2.post("/api/bookings", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
@@ -1647,13 +1795,9 @@ async function registerRoutes(app2) {
       );
       const userBookings = await storage.listUserBookings(userId);
       const passengerRideIds = userBookings.filter((booking) => booking.status === "confirmed" || booking.status === "pending").map((booking) => booking.rideId);
-      const passengerRides = [];
-      for (const rideId of passengerRideIds) {
-        const ride = await storage.getRide(rideId ?? 0);
-        if (ride && (ride.status === "pending" || ride.status === "in_progress")) {
-          passengerRides.push(ride);
-        }
-      }
+      const passengerRides = (await storage.getRidesByIds(
+        passengerRideIds.filter((id) => typeof id === "number")
+      )).filter((ride) => ride.status === "pending" || ride.status === "in_progress");
       const activeRides = [
         ...driverRides.map((ride) => ({
           id: ride.id,
@@ -1842,14 +1986,10 @@ async function registerRoutes(app2) {
     try {
       const userBookings = await storage.listUserBookings(userId);
       const rideTakenIds = userBookings.map((booking) => booking.rideId);
-      const takenRides = [];
-      for (const rideId of rideTakenIds) {
-        const ride = await storage.getRide(rideId ?? 0);
-        if (ride) {
-          takenRides.push(ride);
-        }
-      }
-      const allRides = await storage.listRides();
+      const takenRides = await storage.getRidesByIds(
+        rideTakenIds.filter((id) => typeof id === "number")
+      );
+      const allRides = await storage.listRides({ limit: 200, offset: 0 });
       const availableRides = allRides.filter(
         (ride) => ride.driverId !== userId && ride.status === "pending" && new Date(ride.departureTime) > /* @__PURE__ */ new Date() && !userBookings.some((b) => b.rideId === ride.id && b.status !== "cancelled")
       );
@@ -1900,8 +2040,23 @@ async function registerRoutes(app2) {
       const completedBookings = userBookings.filter((b) => b.status === "completed");
       const userDrivingRides = await storage.listUserDrivingRides(userId);
       const completedDrivingRides = userDrivingRides.filter((r) => r.status === "completed");
-      const co2SavedKg = completedBookings.length * 2.3 + completedDrivingRides.length * 0.8;
-      const distanceTraveledKm = completedBookings.length * 12 + completedDrivingRides.length * 15;
+      const bookedRideIds = completedBookings.map((booking) => booking.rideId).filter((id) => typeof id === "number");
+      const bookedRides = await storage.getRidesByIds(bookedRideIds);
+      const rideById = new Map(bookedRides.map((ride) => [ride.id, ride]));
+      const seatsSoldByRide = await storage.countConfirmedSeatsByRide(
+        completedDrivingRides.map((ride) => ride.id)
+      );
+      const emissions = calculateEmissions(
+        completedBookings.map((booking) => {
+          const ride = booking.rideId === null ? void 0 : rideById.get(booking.rideId);
+          return { distanceKm: toKm(ride?.distanceKm), seats: booking.seats };
+        }),
+        completedDrivingRides.map((ride) => ({
+          distanceKm: toKm(ride.distanceKm),
+          passengerSeats: seatsSoldByRide.get(ride.id) ?? 0
+        })),
+        resolveEmissionFactor(process.env.EMISSION_FACTOR_KG_PER_KM)
+      );
       const userReviews = await storage.listUserReviews(userId);
       const avgRating = userReviews.length > 0 ? userReviews.reduce((sum, review) => sum + Number(review.rating), 0) / userReviews.length : 5;
       const userRewards = await storage.listUserRewards(userId);
@@ -1910,8 +2065,16 @@ async function registerRoutes(app2) {
         totalRides: completedBookings.length + completedDrivingRides.length,
         ridesAsPassenger: completedBookings.length,
         ridesAsDriver: completedDrivingRides.length,
-        co2SavedKg,
-        distanceTraveledKm,
+        // Emissions this user personally avoided by not driving.
+        co2SavedKg: emissions.savedKg,
+        // Emissions their passengers avoided on rides this user drove. Kept
+        // separate so the two are never summed into a double-counted total.
+        co2EnabledKg: emissions.enabledKg,
+        co2ImpactKg: emissions.totalImpactKg,
+        distanceTraveledKm: emissions.distanceKm,
+        // Completed journeys with no recorded distance, excluded above.
+        ridesWithoutDistance: emissions.ridesWithoutDistance,
+        emissionFactorKgPerKm: resolveEmissionFactor(process.env.EMISSION_FACTOR_KG_PER_KM),
         avgRating,
         totalRewardPoints,
         safetyVerificationsCompleted: userRewards.filter((r) => r.type === "safety_verification").length

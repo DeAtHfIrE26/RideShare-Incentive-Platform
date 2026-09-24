@@ -12,8 +12,16 @@ type UserStats = {
   totalRides: number;
   ridesAsPassenger: number;
   ridesAsDriver: number;
+  /** Emissions the user personally avoided by riding instead of driving. */
   co2SavedKg: number;
+  /** Emissions their passengers avoided on rides this user drove. */
+  co2EnabledKg: number;
+  /** savedKg + enabledKg. Never re-derive this by summing the two elsewhere. */
+  co2ImpactKg: number;
   distanceTraveledKm: number;
+  /** Completed journeys with no recorded distance, excluded from the figures. */
+  ridesWithoutDistance: number;
+  emissionFactorKgPerKm: number;
   avgRating: number;
   totalRewardPoints: number;
   safetyVerificationsCompleted: number;
@@ -42,8 +50,11 @@ export default function HomePage() {
       icon: Award,
     },
     {
-      label: "CO2 saved",
-      value: `${(stats?.co2SavedKg ?? 0).toFixed(1)} kg`,
+      // Own savings plus savings enabled for passengers. The two are kept
+      // separate in the API so they are never double counted; this tile shows
+      // the combined figure and the profile page breaks it down.
+      label: "CO2 impact",
+      value: `${(stats?.co2ImpactKg ?? 0).toFixed(1)} kg`,
       icon: Leaf,
     },
     {

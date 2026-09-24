@@ -10,8 +10,17 @@ import { createServer, type Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
 import { setupAuth } from "./auth";
 import { AlertType, safetyServices } from "./safetyServices";
+import { buildPage, readPageParams } from "./pagination";
 import { storage } from "./storage";
 import { ZodError } from "zod";
+import { calculateEmissions, resolveEmissionFactor } from "@shared/emissions";
+
+/** Drizzle returns decimal columns as strings; null stays null. */
+function toKm(value: string | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
 
 /**
  * Turns a Zod failure into a structured field list.
@@ -64,6 +73,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "pending",
         routeDetails: "",
         estimatedDuration: "",
+        distanceKm: rideData.distanceKm === undefined ? null : String(rideData.distanceKm),
         carModel: rideData.carModel || null,
         carColor: rideData.carColor || null,
         licensePlate: rideData.licensePlate || null,
@@ -95,8 +105,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/rides", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const rides = await storage.listRides();
-    res.json(rides);
+
+    // Paginated. Previously returned every ride in the table on every request.
+    const params = readPageParams(req);
+    const [rides, total] = await Promise.all([
+      storage.listRides(params),
+      storage.countRides(),
+    ]);
+
+    res.json(buildPage(rides, total, params));
   });
 
   // Booking routes with enhanced features
@@ -700,13 +717,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .filter(booking => booking.status === "confirmed" || booking.status === "pending")
         .map(booking => booking.rideId);
       
-      const passengerRides = [];
-      for (const rideId of passengerRideIds) {
-        const ride = await storage.getRide(rideId ?? 0);
-        if (ride && (ride.status === "pending" || ride.status === "in_progress")) {
-          passengerRides.push(ride);
-        }
-      }
+      // One query for all of them, rather than one round trip per booking.
+      const passengerRides = (
+        await storage.getRidesByIds(
+          passengerRideIds.filter((id): id is number => typeof id === "number"),
+        )
+      ).filter((ride) => ride.status === "pending" || ride.status === "in_progress");
       
       // Format the response
       const activeRides = [
@@ -960,18 +976,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userBookings = await storage.listUserBookings(userId);
       const rideTakenIds = userBookings.map(booking => booking.rideId);
       
-      // Get the actual rides from the bookings
-      const takenRides = [];
-      for (const rideId of rideTakenIds) {
-        const ride = await storage.getRide(rideId ?? 0);
-        if (ride) {
-          takenRides.push(ride);
-        }
-      }
-      
-      // Simple recommendation logic based on popular destinations or frequent trips
-      // In production, this would use more sophisticated ML algorithms
-      const allRides = await storage.listRides();
+      // One query for every previously taken ride, rather than one per booking.
+      const takenRides = await storage.getRidesByIds(
+        rideTakenIds.filter((id): id is number => typeof id === "number"),
+      );
+
+      // Recommendations are drawn from a bounded window of recent rides.
+      // listRides was unbounded here, so this loaded the entire table to pick
+      // a handful of suggestions.
+      const allRides = await storage.listRides({ limit: 200, offset: 0 });
       
       // Filter out rides created by this user, already booked, or departed
       const availableRides = allRides.filter(ride => 
@@ -1061,14 +1074,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get user's rides as driver
       const userDrivingRides = await storage.listUserDrivingRides(userId);
       const completedDrivingRides = userDrivingRides.filter(r => r.status === "completed");
-      
-      // Get total CO2 saved (example calculation)
-      // In production, this would use actual distance data
-      const co2SavedKg = (completedBookings.length * 2.3) + (completedDrivingRides.length * 0.8);
-      
-      // Get total distance traveled
-      // This is a simplified calculation; in production would use actual route distances
-      const distanceTraveledKm = (completedBookings.length * 12) + (completedDrivingRides.length * 15);
+
+      // Resolve the rides behind the completed bookings in one query rather
+      // than one per booking, which is what the surrounding code used to do.
+      const bookedRideIds = completedBookings
+        .map((booking) => booking.rideId)
+        .filter((id): id is number => typeof id === "number");
+      const bookedRides = await storage.getRidesByIds(bookedRideIds);
+      const rideById = new Map(bookedRides.map((ride) => [ride.id, ride]));
+
+      // Seats sold on each completed drive, for the enabled-savings figure.
+      const seatsSoldByRide = await storage.countConfirmedSeatsByRide(
+        completedDrivingRides.map((ride) => ride.id),
+      );
+
+      const emissions = calculateEmissions(
+        completedBookings.map((booking) => {
+          const ride = booking.rideId === null ? undefined : rideById.get(booking.rideId);
+          return { distanceKm: toKm(ride?.distanceKm), seats: booking.seats };
+        }),
+        completedDrivingRides.map((ride) => ({
+          distanceKm: toKm(ride.distanceKm),
+          passengerSeats: seatsSoldByRide.get(ride.id) ?? 0,
+        })),
+        resolveEmissionFactor(process.env.EMISSION_FACTOR_KG_PER_KM),
+      );
       
       // Calculate ratings
       const userReviews = await storage.listUserReviews(userId);
@@ -1084,8 +1114,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalRides: completedBookings.length + completedDrivingRides.length,
         ridesAsPassenger: completedBookings.length,
         ridesAsDriver: completedDrivingRides.length,
-        co2SavedKg,
-        distanceTraveledKm,
+        // Emissions this user personally avoided by not driving.
+        co2SavedKg: emissions.savedKg,
+        // Emissions their passengers avoided on rides this user drove. Kept
+        // separate so the two are never summed into a double-counted total.
+        co2EnabledKg: emissions.enabledKg,
+        co2ImpactKg: emissions.totalImpactKg,
+        distanceTraveledKm: emissions.distanceKm,
+        // Completed journeys with no recorded distance, excluded above.
+        ridesWithoutDistance: emissions.ridesWithoutDistance,
+        emissionFactorKgPerKm: resolveEmissionFactor(process.env.EMISSION_FACTOR_KG_PER_KM),
         avgRating,
         totalRewardPoints,
         safetyVerificationsCompleted: userRewards.filter(r => r.type === "safety_verification").length,

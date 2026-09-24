@@ -1,7 +1,7 @@
 import type { Booking, InsertUser, Message, Review, Reward, Ride, User } from "@shared/schema";
 import { bookings, messages, reviews, rewards, rides, users } from "@shared/schema";
 import connectPg from "connect-pg-simple";
-import { and, desc, eq, gte, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { sql } from 'drizzle-orm/sql';
 import session from "express-session";
 import { db, pool } from "./db";
@@ -19,8 +19,11 @@ export interface IStorage {
   // Ride operations
   createRide(ride: Omit<Ride, "id" | "createdAt">): Promise<Ride>;
   getRide(id: number): Promise<Ride | undefined>;
-  listRides(): Promise<Ride[]>;
+  listRides(options?: { limit: number; offset: number }): Promise<Ride[]>;
+  countRides(): Promise<number>;
   updateRideStatus(rideId: number, status: string): Promise<Ride>;
+  getRidesByIds(ids: number[]): Promise<Ride[]>;
+  countConfirmedSeatsByRide(rideIds: number[]): Promise<Map<number, number>>;
   reserveRideSeats(rideId: number, seats: number): Promise<Ride | null>;
   releaseRideSeats(rideId: number, seats: number): Promise<void>;
   updateRideSeats(rideId: number, seatsBooked: number): Promise<Ride>;
@@ -375,8 +378,26 @@ export class DatabaseStorage implements IStorage {
     return ride;
   }
 
-  async listRides(): Promise<Ride[]> {
-    return db.select().from(rides).orderBy(desc(rides.createdAt));
+  /**
+   * A page of rides, newest first.
+   *
+   * This was an unbounded `SELECT * FROM rides`: every row went over the wire
+   * and into the browser on each load, so response size and render cost grew
+   * without limit as the table filled. Callers now pass a window and receive
+   * the total alongside it.
+   */
+  async listRides(options: { limit: number; offset: number } = { limit: 20, offset: 0 }): Promise<Ride[]> {
+    return db
+      .select()
+      .from(rides)
+      .orderBy(desc(rides.createdAt))
+      .limit(options.limit)
+      .offset(options.offset);
+  }
+
+  async countRides(): Promise<number> {
+    const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(rides);
+    return Number(row?.count ?? 0);
   }
 
   async updateRideStatus(rideId: number, status: string): Promise<Ride> {
@@ -401,6 +422,48 @@ export class DatabaseStorage implements IStorage {
    * ride when the reservation succeeded, or null when there were not enough
    * seats left, which is how the caller detects losing the race.
    */
+  /**
+   * Fetches many rides in one query.
+   *
+   * Several routes resolved rides by looping `await getRide(id)` over a list of
+   * bookings, which issues one round trip per booking. At Singapore latency
+   * from a US function that is the dominant cost of those endpoints.
+   */
+  async getRidesByIds(ids: number[]): Promise<Ride[]> {
+    if (ids.length === 0) return [];
+    const unique = Array.from(new Set(ids));
+    return db.select().from(rides).where(inArray(rides.id, unique));
+  }
+
+  /**
+   * Seats confirmed or completed per ride, aggregated in the database rather
+   * than by loading every booking row into the process.
+   */
+  async countConfirmedSeatsByRide(rideIds: number[]): Promise<Map<number, number>> {
+    if (rideIds.length === 0) return new Map();
+    const unique = Array.from(new Set(rideIds));
+
+    const rows = await db
+      .select({
+        rideId: bookings.rideId,
+        seats: sql<number>`COALESCE(SUM(${bookings.seats}), 0)::int`,
+      })
+      .from(bookings)
+      .where(
+        and(
+          inArray(bookings.rideId, unique),
+          inArray(bookings.status, ["confirmed", "completed"]),
+        ),
+      )
+      .groupBy(bookings.rideId);
+
+    return new Map(
+      rows
+        .filter((row): row is { rideId: number; seats: number } => row.rideId !== null)
+        .map((row) => [row.rideId, Number(row.seats)]),
+    );
+  }
+
   async reserveRideSeats(rideId: number, seats: number): Promise<Ride | null> {
     const [updated] = await db
       .update(rides)

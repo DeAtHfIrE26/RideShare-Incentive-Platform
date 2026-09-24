@@ -17,9 +17,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Ride } from "@shared/schema";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
 import { useState } from "react";
+
+const PAGE_SIZE = 20;
+
+/** Shape returned by the paginated /api/rides endpoint. */
+type RidePage = {
+  items: Ride[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+};
 
 const EMPTY_RIDE = {
   origin: "",
@@ -27,6 +38,7 @@ const EMPTY_RIDE = {
   departureTime: "",
   seatsAvailable: "1",
   price: "0",
+  distanceKm: "",
   carModel: "",
   carColor: "",
   licensePlate: "",
@@ -62,7 +74,24 @@ export default function RidesPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_RIDE);
 
-  const all = useQuery<Ride[]>({ queryKey: ["/api/rides"] });
+  // /api/rides is paginated; pages are appended as the user asks for more
+  // rather than the whole table arriving at once.
+  const all = useInfiniteQuery<RidePage>({
+    queryKey: ["/api/rides"],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const res = await apiRequest(
+        "GET",
+        `/api/rides?limit=${PAGE_SIZE}&offset=${pageParam as number}`,
+      );
+      return res.json();
+    },
+    getNextPageParam: (last) =>
+      last.hasMore ? last.offset + last.items.length : undefined,
+  });
+
+  const allRides = all.data?.pages.flatMap((page) => page.items) ?? [];
+  const totalRides = all.data?.pages[0]?.total ?? 0;
   const active = useQuery<Ride[]>({ queryKey: ["/api/rides/active"] });
 
   const createRide = useMutation({
@@ -75,6 +104,9 @@ export default function RidesPage() {
         departureTime: new Date(form.departureTime).toISOString(),
         seatsAvailable: Number(form.seatsAvailable),
         price: Number(form.price),
+        // Optional: left out entirely when blank, so the ride is excluded from
+        // emissions statistics rather than carrying an invented distance.
+        distanceKm: form.distanceKm ? Number(form.distanceKm) : undefined,
         carModel: form.carModel || undefined,
         carColor: form.carColor || undefined,
         licensePlate: form.licensePlate || undefined,
@@ -178,6 +210,22 @@ export default function RidesPage() {
                     />
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="distanceKm">Distance (km)</Label>
+                  <Input
+                    id="distanceKm"
+                    type="number"
+                    min={1}
+                    max={5000}
+                    step="1"
+                    placeholder="Optional"
+                    {...field("distanceKm")}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Used for CO2 and distance statistics. Left blank, this ride
+                    is excluded from them rather than estimated.
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="carModel">Car model</Label>
@@ -216,7 +264,26 @@ export default function RidesPage() {
                 <CardTitle>Open rides</CardTitle>
               </CardHeader>
               <CardContent>
-                <RideGrid rides={all.data} loading={all.isLoading} />
+                <RideGrid rides={allRides} loading={all.isLoading} />
+                {all.hasNextPage && (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      variant="outline"
+                      onClick={() => all.fetchNextPage()}
+                      disabled={all.isFetchingNextPage}
+                    >
+                      {all.isFetchingNextPage && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Load more
+                    </Button>
+                  </div>
+                )}
+                {allRides.length > 0 && (
+                  <p className="mt-3 text-center text-sm text-muted-foreground">
+                    Showing {allRides.length} of {totalRides}
+                  </p>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
