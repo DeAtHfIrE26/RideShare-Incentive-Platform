@@ -9,7 +9,7 @@ import { sql as sql2 } from "drizzle-orm";
 import express2 from "express";
 
 // server/db.ts
-import { Pool, neonConfig } from "@neondatabase/serverless";
+import { neonConfig, Pool as NeonPool } from "@neondatabase/serverless";
 
 // shared/schema.ts
 var schema_exports = {};
@@ -344,17 +344,37 @@ var insertReviewSchema = createInsertSchema(reviews).pick({
 
 // server/db.ts
 import dotenv from "dotenv";
-import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle as drizzleNeon } from "drizzle-orm/neon-serverless";
+import { drizzle as drizzleNode } from "drizzle-orm/node-postgres";
+import pg from "pg";
 import ws from "ws";
 dotenv.config();
-neonConfig.webSocketConstructor = ws;
-if (!process.env.DATABASE_URL) {
+var connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
   throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?"
+    "DATABASE_URL must be set. Copy .env.example to .env and fill it in."
   );
 }
-var pool = new Pool({ connectionString: process.env.DATABASE_URL });
-var db = drizzle({ client: pool, schema: schema_exports });
+var isNeon = connectionString.includes("neon.tech");
+function createNeon() {
+  neonConfig.webSocketConstructor = ws;
+  const pool2 = new NeonPool({ connectionString });
+  return { pool: pool2, db: drizzleNeon({ client: pool2, schema: schema_exports }) };
+}
+function createNodePostgres() {
+  const isLocal = connectionString.includes("localhost") || connectionString.includes("127.0.0.1");
+  const pool2 = new pg.Pool({
+    connectionString,
+    ssl: isLocal ? void 0 : { rejectUnauthorized: false }
+  });
+  return {
+    pool: pool2,
+    db: drizzleNode(pool2, { schema: schema_exports })
+  };
+}
+var connection = isNeon ? createNeon() : createNodePostgres();
+var pool = connection.pool;
+var db = connection.db;
 
 // server/hardening.ts
 import express from "express";

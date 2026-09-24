@@ -18,8 +18,10 @@ Single Node process serving both the API and the client.
   under `/api` (`server/routes.ts`) and a WebSocket server on `/ws` used for
   chat and live ride tracking. In development it mounts Vite as middleware; in
   production it serves the prebuilt client from `dist/public`.
-- **Database** — PostgreSQL accessed through Drizzle ORM using the
-  `@neondatabase/serverless` driver over WebSockets. Schema and Zod validators
+- **Database** — PostgreSQL accessed through Drizzle ORM. A `neon.tech` host
+  uses the `@neondatabase/serverless` driver over WebSockets on 443; any other
+  host uses `node-postgres` over TCP, so a local Postgres works unchanged
+  (`server/db.ts`). Schema and Zod validators
   live in `shared/schema.ts` and are shared by client and server. Ten tables:
   `users`, `rides`, `bookings`, `rewards`, `messages`, `reviews`,
   `safety_alerts`, `trusted_contacts`, `safety_zones`, `ride_verifications`.
@@ -37,9 +39,8 @@ Path aliases: `@/*` → `client/src/*`, `@shared/*` → `shared/*`.
 - Node.js 20 or later. Development and verification of this document were done
   on Node 22.22.2 / npm 10.9.7. There is no `engines` field in `package.json`,
   so this is a recommendation rather than an enforced constraint.
-- A PostgreSQL database. The code paths assume a Neon-compatible endpoint
-  because the driver connects over WebSockets; a plain Postgres server may
-  require swapping the driver.
+- A PostgreSQL database. Either a Neon endpoint or a plain Postgres server;
+  `server/db.ts` picks the driver from the host in `DATABASE_URL`.
 
 ## Setup
 

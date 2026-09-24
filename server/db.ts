@@ -1,86 +1,73 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
+import { neonConfig, Pool as NeonPool } from "@neondatabase/serverless";
 import * as schema from "@shared/schema";
-import dotenv from 'dotenv';
-import { drizzle } from 'drizzle-orm/neon-serverless';
+import dotenv from "dotenv";
+import { drizzle as drizzleNeon, type NeonDatabase } from "drizzle-orm/neon-serverless";
+import { drizzle as drizzleNode } from "drizzle-orm/node-postgres";
+import pg from "pg";
 import ws from "ws";
 
-// Load environment variables from .env file
 dotenv.config();
 
-neonConfig.webSocketConstructor = ws;
+const connectionString = process.env.DATABASE_URL;
 
-if (!process.env.DATABASE_URL) {
+if (!connectionString) {
   throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
+    "DATABASE_URL must be set. Copy .env.example to .env and fill it in.",
   );
 }
 
-// Maximum number of connection retries
-const MAX_RETRIES = 5;
-// Initial delay in ms (will be multiplied by 2^retryCount for exponential backoff)
-const INITIAL_RETRY_DELAY = 1000;
+/**
+ * The driver is chosen from the host, matching scripts/seed/db.ts.
+ *
+ * Neon is reached over its WebSocket driver on 443, the transport the deployed
+ * app uses, so the pooled connection string works unchanged and from networks
+ * that block the Postgres port. Anything else — a local Postgres in
+ * development, or CI — uses the standard driver over TCP. Without this, the
+ * app could only ever talk to Neon: pointing it at localhost produced
+ * "Database connection failed" from an attempt to open wss://127.0.0.1/v2.
+ */
+const isNeon = connectionString.includes("neon.tech");
 
-// Function to create a pool with retry logic
-async function createPoolWithRetry(retryCount = 0): Promise<Pool> {
-  try {
-    const newPool = new Pool({ 
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined 
-    });
-    
-    // Validate connection by making a test query
-    const client = await newPool.connect();
-    try {
-      await client.query('SELECT 1');
-      console.log('Database connection established successfully');
-      return newPool;
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    if (retryCount < MAX_RETRIES) {
-      const delay = INITIAL_RETRY_DELAY * Math.pow(2, retryCount);
-      console.error(`Database connection failed. Retrying in ${delay}ms... (${retryCount + 1}/${MAX_RETRIES})`);
-      
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return createPoolWithRetry(retryCount + 1);
-    }
-    
-    console.error('Failed to connect to database after maximum retry attempts', error);
-    // Create an in-memory mock pool for development fallback
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Running with limited functionality in development mode');
-      return {
-        connect: () => Promise.resolve({
-          query: () => Promise.resolve({ rows: [] }),
-          release: () => {}
-        }),
-        query: () => Promise.resolve({ rows: [] }),
-        end: () => Promise.resolve()
-      } as unknown as Pool;
-    }
-    
-    // In production, we should not continue with a broken DB connection
-    throw error;
-  }
+function createNeon() {
+  neonConfig.webSocketConstructor = ws;
+  const pool = new NeonPool({ connectionString });
+  return { pool, db: drizzleNeon({ client: pool, schema }) };
 }
 
-// Create pool with retry logic
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle({ client: pool, schema });
+function createNodePostgres() {
+  const isLocal =
+    connectionString!.includes("localhost") || connectionString!.includes("127.0.0.1");
+  const pool = new pg.Pool({
+    connectionString,
+    ssl: isLocal ? undefined : { rejectUnauthorized: false },
+  });
+  // The two drivers expose the same drizzle query builder; only the transport
+  // and the shape of a raw db.execute() result differ, and nothing in server/
+  // reads that shape. Deployments run the Neon branch, so that is the type the
+  // rest of the server is checked against.
+  return {
+    pool,
+    db: drizzleNode(pool, { schema }) as unknown as NeonDatabase<typeof schema>,
+  };
+}
 
-// Optional: Expose method to test the database connection
+const connection = isNeon ? createNeon() : createNodePostgres();
+
+export const pool = connection.pool;
+export const db = connection.db;
+
+/** Used by the health check and by server startup to confirm the database answers. */
 export async function testDatabaseConnection() {
   try {
     const client = await pool.connect();
     try {
-      await client.query('SELECT 1');
+      await client.query("SELECT 1");
       return true;
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error('Database connection test failed', error);
+    console.error("Database connection test failed", error);
     return false;
   }
 }
