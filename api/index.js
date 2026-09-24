@@ -6,7 +6,7 @@ var __export = (target, all) => {
 
 // server/serverless.ts
 import { sql as sql2 } from "drizzle-orm";
-import express from "express";
+import express2 from "express";
 
 // server/db.ts
 import { Pool, neonConfig } from "@neondatabase/serverless";
@@ -292,6 +292,9 @@ var insertBookingSchema = createInsertSchema(bookings).pick({
   pickupLocation: true,
   dropoffLocation: true
 }).extend({
+  // drizzle-zod infers a bare integer here, which accepted 0 and created a
+  // confirmed booking for no seats. Bounded to match the per-ride maximum.
+  seats: z.number().int().min(1, "At least 1 seat is required").max(8, "Maximum 8 seats allowed"),
   specialRequests: z.string().optional(),
   pickupLocation: z.string().optional(),
   dropoffLocation: z.string().optional()
@@ -318,19 +321,66 @@ if (!process.env.DATABASE_URL) {
 var pool = new Pool({ connectionString: process.env.DATABASE_URL });
 var db = drizzle({ client: pool, schema: schema_exports });
 
+// server/hardening.ts
+import express from "express";
+import helmet from "helmet";
+var BODY_LIMIT = "100kb";
+function applyHardening(app2) {
+  app2.disable("x-powered-by");
+  app2.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          // The shadcn theme plugin injects a <style> block into index.html,
+          // and Tailwind sets inline styles at runtime.
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: ["'self'"],
+          imgSrc: ["'self'", "data:", "blob:"],
+          fontSrc: ["'self'", "data:"],
+          // Same-origin API plus the /ws channel used by chat and tracking.
+          connectSrc: ["'self'", "ws:", "wss:"],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"]
+        }
+      },
+      // Vercel terminates TLS and sets HSTS at the edge; leaving helmet's
+      // default on is harmless and correct for other hosts.
+      crossOriginEmbedderPolicy: false
+    })
+  );
+  app2.use(express.json({ limit: BODY_LIMIT }));
+  app2.use(express.urlencoded({ extended: false, limit: BODY_LIMIT }));
+  app2.use((err, _req, res, next) => {
+    if (err && typeof err === "object" && "type" in err) {
+      const type = err.type;
+      if (type === "entity.parse.failed") {
+        return res.status(400).json({ error: "Malformed JSON in request body" });
+      }
+      if (type === "entity.too.large") {
+        return res.status(413).json({ error: `Request body exceeds the ${BODY_LIMIT} limit` });
+      }
+    }
+    return next(err);
+  });
+}
+
 // server/routes.ts
 import { createServer } from "http";
 import { WebSocket as WebSocket2, WebSocketServer } from "ws";
 
 // server/auth.ts
 import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
 import session2 from "express-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 
 // server/storage.ts
 import connectPg from "connect-pg-simple";
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, gte, or } from "drizzle-orm";
 import { sql } from "drizzle-orm/sql";
 import session from "express-session";
 var PostgresSessionStore = connectPg(session);
@@ -559,6 +609,33 @@ var DatabaseStorage = class {
   async updateRideStatus(rideId, status) {
     const [updatedRide] = await db.update(rides).set({ status }).where(eq(rides.id, rideId)).returning();
     return updatedRide;
+  }
+  /**
+   * Atomically reserves seats on a ride.
+   *
+   * The booking route previously read seatsAvailable, checked it, and only
+   * later decremented it. Concurrent requests all read the same value, all
+   * passed the check, and the ride oversold: five simultaneous bookings on a
+   * one-seat ride produced five confirmed bookings.
+   *
+   * This performs the check and the decrement as a single guarded UPDATE, so
+   * the database serialises contending writers on the row. Returns the updated
+   * ride when the reservation succeeded, or null when there were not enough
+   * seats left, which is how the caller detects losing the race.
+   */
+  async reserveRideSeats(rideId, seats) {
+    const [updated] = await db.update(rides).set({
+      seatsAvailable: sql`${rides.seatsAvailable} - ${seats}`,
+      status: sql`CASE WHEN ${rides.seatsAvailable} - ${seats} <= 0 THEN 'full' ELSE ${rides.status} END`
+    }).where(and(eq(rides.id, rideId), gte(rides.seatsAvailable, seats))).returning();
+    return updated ?? null;
+  }
+  /** Returns seats to a ride when a reservation could not be completed. */
+  async releaseRideSeats(rideId, seats) {
+    await db.update(rides).set({
+      seatsAvailable: sql`${rides.seatsAvailable} + ${seats}`,
+      status: sql`CASE WHEN ${rides.status} = 'full' THEN 'pending' ELSE ${rides.status} END`
+    }).where(eq(rides.id, rideId));
   }
   async updateRideSeats(rideId, seatsBooked) {
     const [ride] = await db.select().from(rides).where(eq(rides.id, rideId));
@@ -798,6 +875,31 @@ async function listRideBookings(rideId) {
 }
 
 // server/auth.ts
+function toPublicUser(user) {
+  const { password: _password, ...publicUser } = user;
+  return publicUser;
+}
+function limitFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+var credentialsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1e3,
+  limit: limitFromEnv("AUTH_RATE_LIMIT", 10),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { message: "Too many attempts. Please try again later." }
+});
+var registrationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1e3,
+  limit: limitFromEnv("REGISTRATION_RATE_LIMIT", 10),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { message: "Too many accounts created. Please try again later." }
+});
 async function hashPassword(password) {
   const salt = await bcrypt.genSalt(10);
   return bcrypt.hash(password, salt);
@@ -806,11 +908,22 @@ async function comparePasswords(supplied, stored) {
   return bcrypt.compare(supplied, stored);
 }
 function setupAuth(app2) {
+  const isProduction = process.env.NODE_ENV === "production";
   const sessionSettings = {
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    store: storage.sessionStore
+    store: storage.sessionStore,
+    cookie: {
+      httpOnly: true,
+      // Only force Secure in production; local development runs over plain
+      // HTTP and would otherwise never receive the cookie.
+      secure: isProduction,
+      // lax stops the cookie riding along on cross-site form posts, which is
+      // the CSRF vector that matters for these endpoints.
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1e3
+    }
   };
   app2.set("trust proxy", 1);
   app2.use(session2(sessionSettings));
@@ -841,29 +954,36 @@ function setupAuth(app2) {
       done(error, null);
     }
   });
-  app2.post("/api/register", async (req, res, next) => {
+  app2.post("/api/register", registrationLimiter, async (req, res, next) => {
+    const parsed = insertUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: "Invalid registration details",
+        errors: parsed.error.issues.map((issue) => ({
+          field: issue.path.join("."),
+          message: issue.message
+        }))
+      });
+    }
     try {
-      const existingUser = await storage.getUserByUsername(req.body.username);
+      const existingUser = await storage.getUserByUsername(parsed.data.username);
       if (existingUser) {
         return res.status(400).json({ message: "Username already exists" });
       }
-      if (!req.body.password || req.body.password.length < 8) {
-        return res.status(400).json({ message: "Password must be at least 8 characters long" });
-      }
       const user = await storage.createUser({
-        ...req.body,
-        password: await hashPassword(req.body.password)
+        ...parsed.data,
+        password: await hashPassword(parsed.data.password)
       });
       req.login(user, (err) => {
         if (err) return next(err);
-        res.status(201).json(user);
+        res.status(201).json(toPublicUser(user));
       });
     } catch (error) {
       console.error("Registration error:", error);
       res.status(500).json({ message: "Server error during registration" });
     }
   });
-  app2.post("/api/login", (req, res, next) => {
+  app2.post("/api/login", credentialsLimiter, (req, res, next) => {
     passport.authenticate("local", (err, user, _info) => {
       if (err) return next(err);
       if (!user) {
@@ -871,7 +991,7 @@ function setupAuth(app2) {
       }
       req.login(user, (err2) => {
         if (err2) return next(err2);
-        return res.json(user);
+        return res.json(toPublicUser(user));
       });
     })(req, res, next);
   });
@@ -886,7 +1006,7 @@ function setupAuth(app2) {
   });
   app2.get("/api/user", (req, res) => {
     if (req.user) {
-      res.json(req.user);
+      res.json(toPublicUser(req.user));
     } else {
       res.status(401).json({ message: "Not authenticated" });
     }
@@ -1017,6 +1137,20 @@ var safetyServices = {
 };
 
 // server/routes.ts
+import { ZodError } from "zod";
+function validationError(error) {
+  if (error instanceof ZodError) {
+    return {
+      error: "Invalid request data",
+      errors: error.issues.map((issue) => ({
+        field: issue.path.join(".") || "(body)",
+        message: issue.message
+      }))
+    };
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return { error: message || "Invalid request data" };
+}
 async function registerRoutes(app2) {
   setupAuth(app2);
   const httpServer = createServer(app2);
@@ -1105,23 +1239,30 @@ async function registerRoutes(app2) {
           error: "You have already booked this ride"
         });
       }
-      if (ride.seatsAvailable < bookingData.seats) {
+      const updatedRide = await storage.reserveRideSeats(ride.id, bookingData.seats);
+      if (!updatedRide) {
+        const current = await storage.getRide(ride.id);
         return res.status(400).json({
-          error: `Not enough seats available. Only ${ride.seatsAvailable} seats left.`
+          error: `Not enough seats available. Only ${current?.seatsAvailable ?? 0} seats left.`
         });
       }
-      const booking = await storage.createBooking({
-        rideId: bookingData.rideId ?? 0,
-        userId: req.user.id,
-        seats: bookingData.seats,
-        status: "confirmed",
-        // Change from pending to confirmed
-        paymentStatus: "pending",
-        specialRequests: bookingData.specialRequests || null,
-        pickupLocation: bookingData.pickupLocation || null,
-        dropoffLocation: bookingData.dropoffLocation || null
-      });
-      const updatedRide = await storage.updateRideSeats(ride.id, bookingData.seats);
+      let booking;
+      try {
+        booking = await storage.createBooking({
+          rideId: bookingData.rideId ?? 0,
+          userId: req.user.id,
+          seats: bookingData.seats,
+          status: "confirmed",
+          // Change from pending to confirmed
+          paymentStatus: "pending",
+          specialRequests: bookingData.specialRequests || null,
+          pickupLocation: bookingData.pickupLocation || null,
+          dropoffLocation: bookingData.dropoffLocation || null
+        });
+      } catch (bookingError) {
+        await storage.releaseRideSeats(ride.id, bookingData.seats);
+        throw bookingError;
+      }
       await storage.updateUserPoints(req.user.id, 10);
       const reward = await storage.createReward({
         userId: req.user.id,
@@ -1158,7 +1299,7 @@ async function registerRoutes(app2) {
       });
     } catch (error) {
       console.error("Booking error:", error);
-      res.status(400).json({ error: error.message || "Invalid booking data" });
+      res.status(400).json(validationError(error));
     }
   });
   app2.get("/api/bookings", async (req, res) => {
@@ -1213,7 +1354,7 @@ async function registerRoutes(app2) {
       res.status(201).json(alert);
     } catch (error) {
       console.error("Safety alert creation error:", error);
-      res.status(400).json({ error: error.message || "Invalid safety alert data" });
+      res.status(400).json(validationError(error));
     }
   });
   app2.get("/api/safety/alerts/user", async (req, res) => {
@@ -1271,7 +1412,7 @@ async function registerRoutes(app2) {
       res.status(201).json(contact);
     } catch (error) {
       console.error("Trusted contact creation error:", error);
-      res.status(400).json({ error: error.message || "Invalid contact data" });
+      res.status(400).json(validationError(error));
     }
   });
   app2.get("/api/safety/contacts", async (req, res) => {
@@ -1300,7 +1441,7 @@ async function registerRoutes(app2) {
       res.status(201).json(zone);
     } catch (error) {
       console.error("Safety zone creation error:", error);
-      res.status(400).json({ error: error.message || "Invalid zone data" });
+      res.status(400).json(validationError(error));
     }
   });
   app2.get("/api/safety/zones/nearby", async (req, res) => {
@@ -1807,9 +1948,8 @@ async function registerRoutes(app2) {
 }
 
 // server/serverless.ts
-var app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+var app = express2();
+applyHardening(app);
 app.set("trust proxy", 1);
 var initialised = null;
 function ensureInitialised() {

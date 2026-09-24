@@ -18,12 +18,12 @@ import { sql } from "drizzle-orm";
 import express from "express";
 import type { IncomingMessage, ServerResponse } from "http";
 import { db } from "./db";
+import { applyHardening } from "./hardening";
 import { registerRoutes } from "./routes";
 
 const app = express();
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+applyHardening(app);
 
 // Required for secure session cookies behind Vercel's proxy.
 app.set("trust proxy", 1);

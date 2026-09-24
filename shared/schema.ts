@@ -296,6 +296,13 @@ export const insertBookingSchema = createInsertSchema(bookings)
     dropoffLocation: true,
   })
   .extend({
+    // drizzle-zod infers a bare integer here, which accepted 0 and created a
+    // confirmed booking for no seats. Bounded to match the per-ride maximum.
+    seats: z
+      .number()
+      .int()
+      .min(1, "At least 1 seat is required")
+      .max(8, "Maximum 8 seats allowed"),
     specialRequests: z.string().optional(),
     pickupLocation: z.string().optional(),
     dropoffLocation: z.string().optional(),

@@ -1,7 +1,7 @@
 import type { Booking, InsertUser, Message, Review, Reward, Ride, User } from "@shared/schema";
 import { bookings, messages, reviews, rewards, rides, users } from "@shared/schema";
 import connectPg from "connect-pg-simple";
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, gte, or } from "drizzle-orm";
 import { sql } from 'drizzle-orm/sql';
 import session from "express-session";
 import { db, pool } from "./db";
@@ -21,6 +21,8 @@ export interface IStorage {
   getRide(id: number): Promise<Ride | undefined>;
   listRides(): Promise<Ride[]>;
   updateRideStatus(rideId: number, status: string): Promise<Ride>;
+  reserveRideSeats(rideId: number, seats: number): Promise<Ride | null>;
+  releaseRideSeats(rideId: number, seats: number): Promise<void>;
   updateRideSeats(rideId: number, seatsBooked: number): Promise<Ride>;
 
   // Additional ride operations
@@ -384,6 +386,43 @@ export class DatabaseStorage implements IStorage {
       .where(eq(rides.id, rideId))
       .returning();
     return updatedRide;
+  }
+
+  /**
+   * Atomically reserves seats on a ride.
+   *
+   * The booking route previously read seatsAvailable, checked it, and only
+   * later decremented it. Concurrent requests all read the same value, all
+   * passed the check, and the ride oversold: five simultaneous bookings on a
+   * one-seat ride produced five confirmed bookings.
+   *
+   * This performs the check and the decrement as a single guarded UPDATE, so
+   * the database serialises contending writers on the row. Returns the updated
+   * ride when the reservation succeeded, or null when there were not enough
+   * seats left, which is how the caller detects losing the race.
+   */
+  async reserveRideSeats(rideId: number, seats: number): Promise<Ride | null> {
+    const [updated] = await db
+      .update(rides)
+      .set({
+        seatsAvailable: sql`${rides.seatsAvailable} - ${seats}`,
+        status: sql`CASE WHEN ${rides.seatsAvailable} - ${seats} <= 0 THEN 'full' ELSE ${rides.status} END`,
+      })
+      .where(and(eq(rides.id, rideId), gte(rides.seatsAvailable, seats)))
+      .returning();
+
+    return updated ?? null;
+  }
+
+  /** Returns seats to a ride when a reservation could not be completed. */
+  async releaseRideSeats(rideId: number, seats: number): Promise<void> {
+    await db
+      .update(rides)
+      .set({
+        seatsAvailable: sql`${rides.seatsAvailable} + ${seats}`,
+        status: sql`CASE WHEN ${rides.status} = 'full' THEN 'pending' ELSE ${rides.status} END`,
+      })
+      .where(eq(rides.id, rideId));
   }
 
   async updateRideSeats(rideId: number, seatsBooked: number): Promise<Ride> {

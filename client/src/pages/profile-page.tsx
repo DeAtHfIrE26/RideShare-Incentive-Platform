@@ -1,13 +1,11 @@
 import PageLayout from "@/components/layout/PageLayout";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 
 type UserStats = {
   totalRides: number;
@@ -21,7 +19,7 @@ type UserStats = {
 };
 
 export default function ProfilePage() {
-  const { user, logoutMutation } = useAuth();
+  const { user } = useAuth();
 
   const { data: stats, isLoading } = useQuery<UserStats>({
     queryKey: ["/api/user/stats"],
@@ -74,16 +72,6 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => logoutMutation.mutate()}
-              disabled={logoutMutation.isPending}
-            >
-              {logoutMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Sign out
-            </Button>
           </CardContent>
         </Card>
 

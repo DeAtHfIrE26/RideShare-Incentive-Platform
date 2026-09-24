@@ -11,6 +11,29 @@ import { WebSocket, WebSocketServer } from "ws";
 import { setupAuth } from "./auth";
 import { AlertType, safetyServices } from "./safetyServices";
 import { storage } from "./storage";
+import { ZodError } from "zod";
+
+/**
+ * Turns a Zod failure into a structured field list.
+ *
+ * The catch blocks previously returned error.message, which for a ZodError is
+ * the raw JSON dump of its issues - unreadable for a client and awkward to
+ * render. Non-Zod errors keep their existing message.
+ */
+function validationError(error: unknown): { error: string; errors?: Array<{ field: string; message: string }> } {
+  if (error instanceof ZodError) {
+    return {
+      error: "Invalid request data",
+      errors: error.issues.map((issue) => ({
+        field: issue.path.join(".") || "(body)",
+        message: issue.message,
+      })),
+    };
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return { error: message || "Invalid request data" };
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
@@ -129,26 +152,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      if (ride.seatsAvailable < bookingData.seats) {
-        return res.status(400).json({ 
-          error: `Not enough seats available. Only ${ride.seatsAvailable} seats left.` 
+      // Reserve the seats atomically BEFORE creating the booking. The earlier
+      // read-check-then-decrement allowed concurrent requests to pass the same
+      // check and oversell the ride. A null result means another request took
+      // the remaining seats first.
+      const updatedRide = await storage.reserveRideSeats(ride.id, bookingData.seats);
+
+      if (!updatedRide) {
+        const current = await storage.getRide(ride.id);
+        return res.status(400).json({
+          error: `Not enough seats available. Only ${current?.seatsAvailable ?? 0} seats left.`
         });
       }
-      
-      // Create the booking
-      const booking = await storage.createBooking({
-        rideId: bookingData.rideId ?? 0,
-        userId: req.user.id,
-        seats: bookingData.seats,
-        status: "confirmed", // Change from pending to confirmed
-        paymentStatus: "pending",
-        specialRequests: bookingData.specialRequests || null,
-        pickupLocation: bookingData.pickupLocation || null,
-        dropoffLocation: bookingData.dropoffLocation || null
-      });
 
-      // Update ride's available seats
-      const updatedRide = await storage.updateRideSeats(ride.id, bookingData.seats);
+      // Create the booking against the seats now held.
+      let booking;
+      try {
+        booking = await storage.createBooking({
+          rideId: bookingData.rideId ?? 0,
+          userId: req.user.id,
+          seats: bookingData.seats,
+          status: "confirmed", // Change from pending to confirmed
+          paymentStatus: "pending",
+          specialRequests: bookingData.specialRequests || null,
+          pickupLocation: bookingData.pickupLocation || null,
+          dropoffLocation: bookingData.dropoffLocation || null
+        });
+      } catch (bookingError) {
+        // Do not strand the reserved seats if the insert fails.
+        await storage.releaseRideSeats(ride.id, bookingData.seats);
+        throw bookingError;
+      }
 
       // Award points for booking
       await storage.updateUserPoints(req.user.id, 10);
@@ -195,7 +229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Booking error:", error);
-      res.status(400).json({ error: error.message || "Invalid booking data" });
+      res.status(400).json(validationError(error));
     }
   });
 
@@ -266,7 +300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(alert);
     } catch (error: any) {
       console.error("Safety alert creation error:", error);
-      res.status(400).json({ error: error.message || "Invalid safety alert data" });
+      res.status(400).json(validationError(error));
     }
   });
 
@@ -339,7 +373,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(contact);
     } catch (error: any) {
       console.error("Trusted contact creation error:", error);
-      res.status(400).json({ error: error.message || "Invalid contact data" });
+      res.status(400).json(validationError(error));
     }
   });
 
@@ -375,7 +409,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(zone);
     } catch (error: any) {
       console.error("Safety zone creation error:", error);
-      res.status(400).json({ error: error.message || "Invalid zone data" });
+      res.status(400).json(validationError(error));
     }
   });
 
