@@ -47,11 +47,22 @@ export function SafetyPage() {
           <CardHeader>
             <CardTitle>Track an active ride</CardTitle>
           </CardHeader>
-          <CardContent>
+          {/*
+            * A fixed height across loading, loaded and empty. The card used to
+            * be 64px of skeleton and then however tall the list turned out to
+            * be, which pushed the safety panel below it down the page - a
+            * 0.48 layout shift, the worst in the app.
+            */}
+          <CardContent className="h-[17rem]">
             {isLoading ? (
-              <Skeleton className="h-16 w-full" />
+              <div className="space-y-2" aria-hidden="true">
+                <Skeleton className="h-[66px] w-full" />
+                <Skeleton className="h-[66px] w-full" />
+                <Skeleton className="h-[66px] w-full" />
+                <Skeleton className="h-[66px] w-full" />
+              </div>
             ) : activeRides && activeRides.length > 0 ? (
-              <div className="space-y-2">
+              <div className="h-full space-y-2 overflow-y-auto pr-1">
                 {activeRides.map((ride) => (
                   <div
                     key={ride.id}
@@ -77,9 +88,9 @@ export function SafetyPage() {
                 ))}
               </div>
             ) : (
-              <p className="py-6 text-center text-muted-foreground">
+              <div className="flex h-full items-center justify-center text-center text-muted-foreground">
                 No active rides to track.
-              </p>
+              </div>
             )}
           </CardContent>
         </Card>

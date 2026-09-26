@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { listItemMotion, useMotionEnabled } from "@/lib/motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -45,11 +46,17 @@ const EMPTY_RIDE = {
 };
 
 function RideGrid({ rides, loading }: { rides?: Ride[]; loading: boolean }) {
+  const motionOn = useMotionEnabled();
+
   if (loading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2">
-        <Skeleton className="h-28 w-full" />
-        <Skeleton className="h-28 w-full" />
+      <div className="grid gap-4 md:grid-cols-2" aria-hidden="true">
+        {/* RIDE_CARD_SKELETON_HEIGHT matches a rendered card, so the grid does
+            not jump when the rides arrive. */}
+        <Skeleton className="h-[232px] w-full" />
+        <Skeleton className="h-[232px] w-full" />
+        <Skeleton className="hidden h-[232px] w-full md:block" />
+        <Skeleton className="hidden h-[232px] w-full md:block" />
       </div>
     );
   }
@@ -62,8 +69,10 @@ function RideGrid({ rides, loading }: { rides?: Ride[]; loading: boolean }) {
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      {rides.map((ride) => (
-        <RideCard key={ride.id} ride={ride} />
+      {rides.map((ride, index) => (
+        <div key={ride.id} {...listItemMotion(motionOn, index)}>
+          <RideCard ride={ride} />
+        </div>
       ))}
     </div>
   );

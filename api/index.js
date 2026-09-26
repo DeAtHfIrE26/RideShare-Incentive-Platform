@@ -821,6 +821,17 @@ var DatabaseStorage = class {
     const [newMessage] = await db.insert(messages).values(message).returning();
     return newMessage;
   }
+  /**
+   * Inserts several messages in one statement.
+   *
+   * Notifying the passengers of a ride ran createMessage in a loop, so a ride
+   * with six confirmed seats cost six sequential round trips to the database
+   * while the caller's request was held open.
+   */
+  async createMessages(input) {
+    if (input.length === 0) return [];
+    return db.insert(messages).values(input).returning();
+  }
   async listUserMessages(userId) {
     return db.select().from(messages).where(
       or(
@@ -1727,17 +1738,15 @@ async function registerRoutes(app2) {
       }
       const updatedRide = await storage.updateRideStatus(rideId, "in_progress");
       const bookings2 = await storage.listRideBookings(rideId);
-      for (const booking of bookings2) {
-        if (booking.status === "confirmed") {
-          await storage.createMessage({
-            senderId: userId,
-            receiverId: booking.userId,
-            content: `Your ride from ${ride.origin} to ${ride.destination} has started. Track in real-time!`,
-            rideId,
-            isRead: false
-          });
-        }
-      }
+      await storage.createMessages(
+        bookings2.filter((booking) => booking.status === "confirmed").map((booking) => ({
+          senderId: userId,
+          receiverId: booking.userId,
+          content: `Your ride from ${ride.origin} to ${ride.destination} has started. Track in real-time!`,
+          rideId,
+          isRead: false
+        }))
+      );
       wss.clients.forEach((client) => {
         if (client.readyState === WebSocket2.OPEN && client.userId) {
           client.send(JSON.stringify({
@@ -1959,17 +1968,15 @@ async function registerRoutes(app2) {
       }
       if (userId === ride.driverId) {
         const bookings2 = await storage.listRideBookings(rideId);
-        for (const booking of bookings2) {
-          if (booking.status === "confirmed") {
-            await storage.createMessage({
-              senderId: userId,
-              receiverId: booking.userId,
-              content: `SAFETY ALERT: ${safetyServices.getAlertMessage({ alertType })}`,
-              rideId,
-              isRead: false
-            });
-          }
-        }
+        await storage.createMessages(
+          bookings2.filter((booking) => booking.status === "confirmed").map((booking) => ({
+            senderId: userId,
+            receiverId: booking.userId,
+            content: `SAFETY ALERT: ${safetyServices.getAlertMessage({ alertType })}`,
+            rideId,
+            isRead: false
+          }))
+        );
       } else {
         await storage.createMessage({
           senderId: userId,

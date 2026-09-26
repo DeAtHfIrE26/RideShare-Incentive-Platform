@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/currency";
+import { MOTION_CLASS } from "@/lib/motion";
 import { apiRequest } from "@/lib/queryClient";
 import type { Ride } from "@shared/schema";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -103,7 +104,7 @@ function RideCard({ ride }: RideCardProps) {
 
   return (
     <>
-      <Card className="transition-all duration-200 hover:shadow-md">
+      <Card className={`h-full ${MOTION_CLASS.liftOnHover}`}>
         <CardContent className="pt-6">
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-3">

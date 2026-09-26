@@ -126,6 +126,7 @@ export interface IStorage {
 
   // Message operations
   createMessage(message: Omit<Message, "id" | "createdAt">): Promise<Message>;
+  createMessages(input: Omit<Message, "id" | "createdAt">[]): Promise<Message[]>;
   listUserMessages(userId: number): Promise<Message[]>;
   markMessageAsRead(messageId: number): Promise<Message>;
   getUnreadMessageCount(userId: number): Promise<number>;
@@ -616,6 +617,18 @@ export class DatabaseStorage implements IStorage {
   async createMessage(message: Omit<Message, "id" | "createdAt">): Promise<Message> {
     const [newMessage] = await db.insert(messages).values(message).returning();
     return newMessage;
+  }
+
+  /**
+   * Inserts several messages in one statement.
+   *
+   * Notifying the passengers of a ride ran createMessage in a loop, so a ride
+   * with six confirmed seats cost six sequential round trips to the database
+   * while the caller's request was held open.
+   */
+  async createMessages(input: Omit<Message, "id" | "createdAt">[]): Promise<Message[]> {
+    if (input.length === 0) return [];
+    return db.insert(messages).values(input).returning();
   }
 
   async listUserMessages(userId: number): Promise<Message[]> {

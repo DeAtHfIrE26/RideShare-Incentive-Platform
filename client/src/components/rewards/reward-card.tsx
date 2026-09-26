@@ -1,5 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { MOTION_CLASS } from "@/lib/motion";
 import { Gift } from "lucide-react";
 import type { Reward } from "@shared/schema";
 import { formatDate } from "@/lib/datetime";
@@ -10,7 +11,7 @@ interface RewardCardProps {
 
 export default function RewardCard({ reward }: RewardCardProps) {
   return (
-    <Card>
+    <Card className={MOTION_CLASS.liftOnHover}>
       <CardContent className="flex flex-wrap items-center justify-between gap-3 p-6">
         <div className="flex min-w-0 items-center gap-4">
           <div className="shrink-0 rounded-full bg-primary/10 p-3">

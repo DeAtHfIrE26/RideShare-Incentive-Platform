@@ -41,12 +41,16 @@ export default function ChatPage() {
             <CardHeader>
               <CardTitle className="text-base">Conversations</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            {/* A fixed height, so the card does not resize when the list
+                arrives and shift the notifications panel below it. */}
+            <CardContent className="h-[16rem] space-y-2 overflow-y-auto">
               {isLoading ? (
-                <>
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                </>
+                <div className="space-y-2" aria-hidden="true">
+                  <Skeleton className="h-[52px] w-full" />
+                  <Skeleton className="h-[52px] w-full" />
+                  <Skeleton className="h-[52px] w-full" />
+                  <Skeleton className="h-[52px] w-full" />
+                </div>
               ) : bookings && bookings.length > 0 ? (
                 bookings.map((booking) => (
                   <Button

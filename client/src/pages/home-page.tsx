@@ -1,7 +1,9 @@
 import PageLayout from "@/components/layout/PageLayout";
 import RideCard from "@/components/rides/ride-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Skeleton } from "@/components/ui/skeleton";
+import { listItemMotion, MOTION_CLASS, useMotionEnabled } from "@/lib/motion";
 import { useAuth } from "@/hooks/use-auth";
 import type { Ride } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
@@ -38,15 +40,23 @@ export default function HomePage() {
     queryKey: ["/api/rides/recommended"],
   });
 
+  const motionOn = useMotionEnabled();
+
+  // Each figure counts up to its value rather than appearing, so the change is
+  // legible when the stats resolve or are refetched.
   const tiles = [
     {
       label: "Rides completed",
       value: stats?.totalRides ?? 0,
+      decimals: 0,
+      suffix: "",
       icon: Car,
     },
     {
       label: "Reward points",
       value: stats?.totalRewardPoints ?? 0,
+      decimals: 0,
+      suffix: "",
       icon: Award,
     },
     {
@@ -54,12 +64,16 @@ export default function HomePage() {
       // separate in the API so they are never double counted; this tile shows
       // the combined figure and the profile page breaks it down.
       label: "CO2 impact",
-      value: `${(stats?.co2ImpactKg ?? 0).toFixed(1)} kg`,
+      value: stats?.co2ImpactKg ?? 0,
+      decimals: 1,
+      suffix: " kg",
       icon: Leaf,
     },
     {
       label: "Average rating",
-      value: (stats?.avgRating ?? 0).toFixed(1),
+      value: stats?.avgRating ?? 0,
+      decimals: 1,
+      suffix: "",
       icon: Star,
     },
   ];
@@ -75,22 +89,26 @@ export default function HomePage() {
         </p>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {tiles.map(({ label, value, icon: Icon }) => (
-            <Card key={label}>
-              <CardContent className="flex items-center gap-4 p-6">
-                <div className="rounded-full bg-primary/10 p-3">
-                  <Icon className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{label}</p>
-                  {statsLoading ? (
-                    <Skeleton className="mt-1 h-6 w-16" />
-                  ) : (
-                    <p className="text-xl font-semibold">{value}</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+          {tiles.map(({ label, value, decimals, suffix, icon: Icon }, index) => (
+            <div key={label} {...listItemMotion(motionOn, index)}>
+              <Card className={`h-full ${MOTION_CLASS.liftOnHover}`}>
+                <CardContent className="flex items-center gap-4 p-6">
+                  <div className="rounded-full bg-primary/10 p-3">
+                    <Icon className="h-5 w-5 text-primary" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                    {statsLoading ? (
+                      <Skeleton className="mt-1 h-7 w-20" />
+                    ) : (
+                      <p className="text-xl font-semibold tabular-nums">
+                        <AnimatedNumber value={value} decimals={decimals} suffix={suffix} />
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           ))}
         </div>
 
@@ -100,9 +118,9 @@ export default function HomePage() {
           </CardHeader>
           <CardContent>
             {ridesLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-28 w-full" />
-                <Skeleton className="h-28 w-full" />
+              <div className="grid gap-4 md:grid-cols-2" aria-hidden="true">
+                <Skeleton className="h-[232px] w-full" />
+                <Skeleton className="h-[232px] w-full" />
               </div>
             ) : recommended && recommended.length > 0 ? (
               <div className="grid gap-4 md:grid-cols-2">

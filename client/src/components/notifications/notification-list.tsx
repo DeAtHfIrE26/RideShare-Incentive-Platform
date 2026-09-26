@@ -81,7 +81,7 @@ export default function NotificationList() {
   }, {} as Record<string, Message[]>);
 
   return (
-    <Card className="h-full">
+    <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2">
           <Bell className="h-5 w-5" />

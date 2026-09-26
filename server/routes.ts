@@ -547,18 +547,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create a ride start notification
       const bookings = await storage.listRideBookings(rideId);
       
-      // Notify all passengers
-      for (const booking of bookings) {
-        if (booking.status === "confirmed") {
-          await storage.createMessage({
+      // Notify all passengers, in one insert rather than one per passenger.
+      await storage.createMessages(
+        bookings
+          .filter((booking) => booking.status === "confirmed")
+          .map((booking) => ({
             senderId: userId,
             receiverId: booking.userId,
             content: `Your ride from ${ride.origin} to ${ride.destination} has started. Track in real-time!`,
             rideId,
-            isRead: false
-          });
-        }
-      }
+            isRead: false,
+          })),
+      );
       
       // Broadcast to connected WebSocket clients
       wss.clients.forEach((client) => {
@@ -866,17 +866,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // If the driver raised the alert, notify all passengers
         const bookings = await storage.listRideBookings(rideId);
         
-        for (const booking of bookings) {
-          if (booking.status === "confirmed") {
-            await storage.createMessage({
+        // One insert for the whole passenger list; an emergency is the worst
+        // moment to be paying a round trip per recipient.
+        await storage.createMessages(
+          bookings
+            .filter((booking) => booking.status === "confirmed")
+            .map((booking) => ({
               senderId: userId,
               receiverId: booking.userId,
               content: `SAFETY ALERT: ${safetyServices.getAlertMessage({ alertType } as any)}`,
               rideId,
-              isRead: false
-            });
-          }
-        }
+              isRead: false,
+            })),
+        );
       } else {
         // If a passenger raised the alert, notify the driver
         await storage.createMessage({

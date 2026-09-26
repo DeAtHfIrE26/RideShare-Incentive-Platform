@@ -1,12 +1,15 @@
 import PageLayout from "@/components/layout/PageLayout";
 import RewardCard from "@/components/rewards/reward-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AnimatedNumber } from "@/components/motion/animated-number";
 import { Skeleton } from "@/components/ui/skeleton";
+import { listItemMotion, useMotionEnabled } from "@/lib/motion";
 import type { Reward } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { Award } from "lucide-react";
 
 export default function RewardsPage() {
+  const motionOn = useMotionEnabled();
   const { data: rewards, isLoading } = useQuery<Reward[]>({
     queryKey: ["/api/rewards"],
   });
@@ -32,7 +35,9 @@ export default function RewardsPage() {
               {isLoading ? (
                 <Skeleton className="mt-1 h-7 w-20" />
               ) : (
-                <p className="text-2xl font-semibold">{totalPoints}</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  <AnimatedNumber value={totalPoints} />
+                </p>
               )}
             </div>
           </CardContent>
@@ -44,14 +49,19 @@ export default function RewardsPage() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-20 w-full" />
-                <Skeleton className="h-20 w-full" />
+              <div className="space-y-3" aria-hidden="true">
+                {/* Matches a rendered reward row, so the list does not jump. */}
+                <Skeleton className="h-[98px] w-full" />
+                <Skeleton className="h-[98px] w-full" />
+                <Skeleton className="h-[98px] w-full" />
+                <Skeleton className="h-[98px] w-full" />
               </div>
             ) : rewards && rewards.length > 0 ? (
               <div className="space-y-3">
-                {rewards.map((reward) => (
-                  <RewardCard key={reward.id} reward={reward} />
+                {rewards.map((reward, index) => (
+                  <div key={reward.id} {...listItemMotion(motionOn, index)}>
+                    <RewardCard reward={reward} />
+                  </div>
                 ))}
               </div>
             ) : (

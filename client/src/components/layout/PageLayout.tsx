@@ -1,3 +1,4 @@
+import { PageTransition } from "@/components/motion/page-transition";
 import { cn } from "@/lib/utils";
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import { Footer } from "./Footer";
@@ -58,7 +59,9 @@ export default function PageLayout({ children, showFooter = true }: PageLayoutPr
         )}
       >
         <Header />
-        <main className="flex-1">{children}</main>
+        <main className="flex-1">
+          <PageTransition>{children}</PageTransition>
+        </main>
         {showFooter && <Footer />}
       </div>
     </div>
