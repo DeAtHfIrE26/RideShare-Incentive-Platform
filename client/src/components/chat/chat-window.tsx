@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import type { User } from "@shared/schema";
-import { format } from "date-fns";
+import { formatDate, formatDayMonth, formatDateTime, formatTime } from "@/lib/datetime";
 import { AlertCircle, CheckCircle2, Clock, MoreHorizontal, PhoneCall, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatStatus } from "@/lib/status";
@@ -306,16 +306,16 @@ export default function ChatWindow({ selectedUser, selectedBooking }: ChatWindow
       
       // If message is from today, just show time
       if (messageDate.toDateString() === today.toDateString()) {
-        return format(messageDate, "h:mm a");
+        return formatTime(messageDate);
       }
       
       // If message is from yesterday, show "Yesterday" and time
       if (messageDate.toDateString() === yesterday.toDateString()) {
-        return `Yesterday ${format(messageDate, "h:mm a")}`;
+        return `Yesterday ${formatTime(messageDate)}`;
       }
       
       // Otherwise show full date and time
-      return format(messageDate, "MMM d, h:mm a");
+      return formatDateTime(messageDate);
     } catch (error) {
       console.error("Error formatting message time:", error);
       return "";
@@ -349,7 +349,7 @@ export default function ChatWindow({ selectedUser, selectedBooking }: ChatWindow
       const diffHours = Math.floor(diffMinutes / 60);
       if (diffHours < 24) return `${diffHours}h ago`;
       
-      return format(lastActiveDate, 'MMM d');
+      return formatDayMonth(lastActiveDate);
     } catch (error) {
       console.error("Error formatting last active time:", error);
       return 'Unknown';
@@ -431,7 +431,7 @@ export default function ChatWindow({ selectedUser, selectedBooking }: ChatWindow
                   {selectedBooking.ride?.origin?.substring(0, 10)} → {selectedBooking.ride?.destination?.substring(0, 10)}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  {selectedBooking.ride?.date ? format(new Date(selectedBooking.ride.date), 'MMM d, h:mm a') : 'No date'} • {formatStatus(selectedBooking.status)}
+                  {selectedBooking.ride?.date ? formatDateTime(new Date(selectedBooking.ride.date)) : 'No date'} • {formatStatus(selectedBooking.status)}
                 </p>
               </div>
             </div>
@@ -486,7 +486,7 @@ export default function ChatWindow({ selectedUser, selectedBooking }: ChatWindow
                       ? 'Today'
                       : new Date(date).toDateString() === new Date(Date.now() - 86400000).toDateString()
                       ? 'Yesterday'
-                      : format(new Date(date), 'MMM d, yyyy')}
+                      : formatDate(new Date(date))}
                   </div>
                 </div>
                 

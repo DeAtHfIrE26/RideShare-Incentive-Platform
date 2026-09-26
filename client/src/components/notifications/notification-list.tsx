@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Bell, Check } from "lucide-react";
 import type { Message } from "@shared/schema";
-import { format } from "date-fns";
+import { formatTime } from "@/lib/datetime";
 import { Button } from "@/components/ui/button";
 
 export default function NotificationList() {
@@ -110,7 +110,7 @@ export default function NotificationList() {
                     >
                       <div className="flex justify-between items-start mb-1">
                         <span className="text-sm font-medium">
-                          {message.createdAt && format(new Date(message.createdAt), "h:mm a")}
+                          {message.createdAt && formatTime(new Date(message.createdAt))}
                         </span>
                         {!message.isRead && (
                           <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">

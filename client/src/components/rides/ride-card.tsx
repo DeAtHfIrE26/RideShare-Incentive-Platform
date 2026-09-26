@@ -10,15 +10,15 @@ import { formatCurrency } from "@/lib/currency";
 import { apiRequest } from "@/lib/queryClient";
 import type { Ride } from "@shared/schema";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { formatDateTime, formatDateTimeLong } from "@/lib/datetime";
 import { AlertCircle, Calendar, Clock, CreditCard, MapPin, Users } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 
 interface RideCardProps {
   ride: Ride;
 }
 
-export default function RideCard({ ride }: RideCardProps) {
+function RideCard({ ride }: RideCardProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -128,7 +128,7 @@ export default function RideCard({ ride }: RideCardProps) {
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <span className="whitespace-nowrap text-sm">
-                    {format(new Date(ride.departureTime), "MMM d, h:mm a")}
+                    {formatDateTime(new Date(ride.departureTime))}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -224,7 +224,7 @@ export default function RideCard({ ride }: RideCardProps) {
             
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm">Departure: {format(new Date(ride.departureTime), "MMM d, yyyy 'at' h:mm a")}</span>
+              <span className="text-sm">Departure: {formatDateTimeLong(new Date(ride.departureTime))}</span>
             </div>
           </div>
           
@@ -244,3 +244,10 @@ export default function RideCard({ ride }: RideCardProps) {
     </>
   );
 }
+
+/**
+ * A ride row is pure in its props, and a page of twenty sits under state that
+ * changes for unrelated reasons - opening the publish dialog, loading the next
+ * page. Without this every one of them re-rendered each time.
+ */
+export default memo(RideCard);

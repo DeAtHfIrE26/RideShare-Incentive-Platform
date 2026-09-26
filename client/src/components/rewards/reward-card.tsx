@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Gift } from "lucide-react";
 import type { Reward } from "@shared/schema";
-import { format } from "date-fns";
+import { formatDate } from "@/lib/datetime";
 
 interface RewardCardProps {
   reward: Reward;
@@ -19,7 +19,7 @@ export default function RewardCard({ reward }: RewardCardProps) {
           <div className="min-w-0">
             <h3 className="break-words font-medium">{reward.description}</h3>
             <p className="text-sm text-muted-foreground">
-              {format(new Date(reward.createdAt!), "MMM d, yyyy")}
+              {formatDate(new Date(reward.createdAt!))}
             </p>
           </div>
         </div>

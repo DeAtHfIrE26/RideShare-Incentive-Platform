@@ -12,7 +12,9 @@ export function ProtectedRoute({
   component: Component,
 }: {
   path: string;
-  component: () => React.JSX.Element;
+  // ComponentType rather than a bare function, so a React.lazy() component
+  // from the route-level code splitting in App.tsx is accepted.
+  component: React.ComponentType;
 }) {
   const { user, isLoading } = useAuth();
 

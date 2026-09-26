@@ -704,15 +704,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const userId = req.user.id;
     
     try {
-      // Find rides where user is driver. listUserDrivingRides returns every
-      // state, so restrict to live ones here - the same filter already applied
-      // to the passenger side below.
-      const driverRides = (await storage.listUserDrivingRides(userId)).filter(
+      // The driver and passenger lookups are independent, so they go out
+      // together rather than one round trip after the other.
+      const [drivingRides, userBookings] = await Promise.all([
+        storage.listUserDrivingRides(userId),
+        storage.listUserBookings(userId),
+      ]);
+
+      // listUserDrivingRides returns every state, so restrict to live ones
+      // here - the same filter already applied to the passenger side below.
+      const driverRides = drivingRides.filter(
         (ride) => ride.status === "pending" || ride.status === "in_progress",
       );
-      
-      // Find rides where user is passenger
-      const userBookings = await storage.listUserBookings(userId);
+
       const passengerRideIds = userBookings
         .filter(booking => booking.status === "confirmed" || booking.status === "pending")
         .map(booking => booking.rideId);
@@ -972,19 +976,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const userId = req.user.id;
     
     try {
-      // Get user's ride history
-      const userBookings = await storage.listUserBookings(userId);
+      // The candidate window does not depend on the user's history, so the
+      // two go out together; only the taken-rides lookup has to wait.
+      // Recommendations are drawn from a bounded window of recent rides.
+      // listRides was unbounded here, so this loaded the entire table to pick
+      // a handful of suggestions.
+      const [userBookings, allRides] = await Promise.all([
+        storage.listUserBookings(userId),
+        storage.listRides({ limit: 200, offset: 0 }),
+      ]);
+
       const rideTakenIds = userBookings.map(booking => booking.rideId);
-      
+
       // One query for every previously taken ride, rather than one per booking.
       const takenRides = await storage.getRidesByIds(
         rideTakenIds.filter((id): id is number => typeof id === "number"),
       );
-
-      // Recommendations are drawn from a bounded window of recent rides.
-      // listRides was unbounded here, so this loaded the entire table to pick
-      // a handful of suggestions.
-      const allRides = await storage.listRides({ limit: 200, offset: 0 });
       
       // Filter out rides created by this user, already booked, or departed
       const availableRides = allRides.filter(ride => 
@@ -1065,14 +1072,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const userId = req.user.id;
     
     try {
-      const user = await storage.getUser(userId);
-      
-      // Get user's bookings
-      const userBookings = await storage.listUserBookings(userId);
+      // This endpoint used to issue seven queries one after another, each a
+      // separate round trip to the database. Only two of them depend on an
+      // earlier result, so the rest run as one wave. An eighth, a re-fetch of
+      // the user that req.user already holds, was assigned and never read.
+      const [userBookings, userDrivingRides, userReviews, userRewards] =
+        await Promise.all([
+          storage.listUserBookings(userId),
+          storage.listUserDrivingRides(userId),
+          storage.listUserReviews(userId),
+          storage.listUserRewards(userId),
+        ]);
+
       const completedBookings = userBookings.filter(b => b.status === "completed");
-      
-      // Get user's rides as driver
-      const userDrivingRides = await storage.listUserDrivingRides(userId);
       const completedDrivingRides = userDrivingRides.filter(r => r.status === "completed");
 
       // Resolve the rides behind the completed bookings in one query rather
@@ -1080,13 +1092,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bookedRideIds = completedBookings
         .map((booking) => booking.rideId)
         .filter((id): id is number => typeof id === "number");
-      const bookedRides = await storage.getRidesByIds(bookedRideIds);
-      const rideById = new Map(bookedRides.map((ride) => [ride.id, ride]));
 
-      // Seats sold on each completed drive, for the enabled-savings figure.
-      const seatsSoldByRide = await storage.countConfirmedSeatsByRide(
-        completedDrivingRides.map((ride) => ride.id),
-      );
+      // Both depend on the wave above but not on each other.
+      const [bookedRides, seatsSoldByRide] = await Promise.all([
+        storage.getRidesByIds(bookedRideIds),
+        // Seats sold on each completed drive, for the enabled-savings figure.
+        storage.countConfirmedSeatsByRide(completedDrivingRides.map((ride) => ride.id)),
+      ]);
+
+      const rideById = new Map(bookedRides.map((ride) => [ride.id, ride]));
 
       const emissions = calculateEmissions(
         completedBookings.map((booking) => {
@@ -1100,14 +1114,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resolveEmissionFactor(process.env.EMISSION_FACTOR_KG_PER_KM),
       );
       
-      // Calculate ratings
-      const userReviews = await storage.listUserReviews(userId);
       const avgRating = userReviews.length > 0 
         ? userReviews.reduce((sum, review) => sum + Number(review.rating), 0) / userReviews.length
         : 5.0;
       
-      // Get rewards summary
-      const userRewards = await storage.listUserRewards(userId);
       const totalRewardPoints = userRewards.reduce((sum, reward) => sum + reward.points, 0);
       
       const stats = {

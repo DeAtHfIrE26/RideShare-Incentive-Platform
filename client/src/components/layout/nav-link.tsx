@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { prefetchRoute } from "@/lib/route-chunks";
 import { Link } from "wouter";
 import type { NavItem } from "./nav-items";
 
@@ -30,6 +31,9 @@ export function NavLink({
     <Link
       href={item.href}
       onClick={onNavigate}
+      onMouseEnter={() => prefetchRoute(item.href)}
+      onFocus={() => prefetchRoute(item.href)}
+      onTouchStart={() => prefetchRoute(item.href)}
       title={collapsed ? item.name : undefined}
       aria-current={active ? "page" : undefined}
       className={cn(
